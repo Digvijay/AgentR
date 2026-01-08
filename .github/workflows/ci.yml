@@ -1,0 +1,69 @@
+name: AgentR CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    # Required for Testcontainers to run Docker
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore AgentR.sln
+
+    - name: Build
+      run: dotnet build AgentR.sln --no-restore --configuration Release
+
+    - name: Run Tests
+      run: dotnet test src/AgentR.Tests/AgentR.Tests.csproj --no-build --configuration Release --verbosity normal
+      env:
+        # Override connection string if needed, though AgentRFactory defaults to localhost:6379
+        REDIS_CONNECTION: localhost:6379
+
+    - name: Template Smoke Test
+      run: |
+        # 1. Install local template
+        dotnet new install ./templates/AgentR.Worker
+        
+        # 2. Scaffold a project
+        mkdir smoke-test
+        dotnet new agentr-worker -n SmokeAgent -o smoke-test/SmokeAgent
+        
+        # 3. Build the scaffolded project
+        # Note: We need a Nuget.config or to point to the built dlls if AgentR.Client isn't pre-installed
+        # For CI, we'll pack the projects locally first to provide a feed
+        mkdir nupkgs
+        dotnet pack src/AgentR.Shared/AgentR.Shared.csproj -o nupkgs
+        dotnet pack src/AgentR.Client/AgentR.Client.csproj -o nupkgs
+        
+        dotnet build smoke-test/SmokeAgent/SmokeAgent.csproj -s ./nupkgs -s https://api.nuget.org/v3/index.json
+
+    - name: Pack Preview
+      run: |
+        dotnet pack src/AgentR.Shared/AgentR.Shared.csproj --configuration Release -o artifacts
+        dotnet pack src/AgentR.Client/AgentR.Client.csproj --configuration Release -o artifacts
+        # Pack the template too
+        dotnet pack templates/AgentR.Worker/AgentRWorker.csproj --configuration Release -o artifacts
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nupkgs
+        path: artifacts/*.nupkg

@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <PackageId>AgentR.Shared</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Digvijay</Authors>
+    <Company>AgentR Corp</Company>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>NuGetREADME.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/digvijay/AgentR</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/digvijay/AgentR</RepositoryUrl>
+    <Description>Shared protocol definitions and frame structures for the AgentR Real-time Transport Protocol.</Description>
+    <PackageTags>ai;agents;signalr;protocol;messagepack</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\icon.png" Pack="true" PackagePath="\" />
+    <None Include="..\..\NuGetREADME.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MessagePack" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>

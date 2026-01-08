@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Template specific properties -->
+    <PackageType>Template</PackageType>
+    <PackageId>AgentR.Templates.Worker</PackageId>
+    <Title>AgentR Worker Template</Title>
+    <Authors>Digvijay</Authors>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/digvijay/AgentR</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/digvijay/AgentR</RepositoryUrl>
+    <Description>Standard template for building AgentR-compatible AI workers. Includes SignalR connectivity, JWT auth, and optional Semantic Kernel integration.</Description>
+    <PackageTags>dotnet-new;templates;AgentR;AI;agents</PackageTags>
+    <IncludeContentInPack>true</IncludeContentInPack>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\icon.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AgentR.Client" Version="1.0.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.0" />
+<!--#if (UseSemanticKernel) -->
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.0.1" />
+<!--#endif -->
+  </ItemGroup>
+
+</Project>

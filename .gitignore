@@ -1,0 +1,39 @@
+# .NET
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Tt]est[Rr]esults/
+*.user
+*.userosscache
+*.sln.doccache
+.vs/
+.idea/
+.vscode/
+*.swp
+*.lut
+*.suo
+
+# NuGet
+nupkgs/
+artifacts/
+*.nupkg
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+build/
+dist/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Aspire / Docker
+.aspire/
+.docker/

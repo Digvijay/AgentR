@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentr"
+version = "1.0.0"
+authors = [
+  { name="Digvijay", email="digvijay@example.com" },
+]
+description = "Professional Real-time Transport Protocol for Distributed AI Agents."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Intended Audience :: Developers",
+]
+dependencies = [
+    "signalrcore1>=1.1.7",
+    "msgpack>=1.0.8",
+    "pyjwt>=2.10.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/digvijay/AgentR"
+Issues = "https://github.com/digvijay/AgentR/issues"

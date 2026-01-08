@@ -1,0 +1,43 @@
+# AgentR Python SDK
+
+The official Python client for the AgentR Real-time Transport Protocol.
+
+## Installation
+```bash
+cd src/AgentR.Python
+python3 -m venv venv
+source venv/bin/activate
+pip install .
+```
+
+## Usage
+```python
+from agentr import AgentRClient
+import jwt
+
+# Generate Auth Token
+SECRET_KEY = "ThisIsMySuperSecretKeyForAgentR_MustBe32CharsLong!"
+token = jwt.encode({"sub": "MyBot"}, SECRET_KEY, algorithm="HS256")
+
+# Connect
+client = AgentRClient("http://localhost:5000/agentHub", "MyBot", token)
+client.connect()
+
+# Define Behavior
+def my_agent_logic(stop_event):
+    for i in range(10):
+        if stop_event.is_set():
+            print("Interrupted!")
+            return
+        print(f"Step {i}")
+        time.sleep(1)
+
+client.on_turn_granted = my_agent_logic
+client.request_turn()
+```
+
+## Key Features
+- ✅ JWT Authentication
+- ✅ MessagePack Protocol
+- ✅ Remote Interruption via `stop_event`
+- ✅ Turn-based Concurrency

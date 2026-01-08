@@ -1,0 +1,53 @@
+{
+    "$schema": "http://json.schemastore.org/template",
+    "author": "AgentR Contributors",
+    "classifications": [
+        "AI",
+        "Agent",
+        "SignalR",
+        "Distributed"
+    ],
+    "identity": "AgentR.Worker.Template",
+    "name": "AgentR Worker",
+    "shortName": "agentr-worker",
+    "tags": {
+        "language": "C#",
+        "type": "project"
+    },
+    "sourceName": "AgentRWorker",
+    "preferNameDirectory": true,
+    "symbols": {
+        "AgentName": {
+            "type": "parameter",
+            "datatype": "string",
+            "defaultValue": "MyAgent",
+            "replaces": "AGENT_NAME_PLACEHOLDER",
+            "description": "The name of your agent"
+        },
+        "HubUrl": {
+            "type": "parameter",
+            "datatype": "string",
+            "defaultValue": "http://localhost:5000/agentHub",
+            "replaces": "HUB_URL_PLACEHOLDER",
+            "description": "The SignalR hub URL to connect to"
+        },
+        "UseSemanticKernel": {
+            "type": "parameter",
+            "datatype": "bool",
+            "defaultValue": "true",
+            "description": "Include Semantic Kernel and Ollama integration"
+        }
+    },
+    "sources": [
+        {
+            "modifiers": [
+                {
+                    "condition": "(!UseSemanticKernel)",
+                    "exclude": [
+                        "**/*SK*"
+                    ]
+                }
+            ]
+        }
+    ]
+}
