@@ -29,11 +29,17 @@ env/
 build/
 dist/
 *.egg-info/
+.pytest_cache/
 
 # OS
+# .agent/ (Removed)
 .DS_Store
 Thumbs.db
 
 # Aspire / Docker
 .aspire/
 .docker/
+
+# AgentR Flight Recorder
+flight_data/
+test_flight_data/

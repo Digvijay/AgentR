@@ -9,49 +9,83 @@ namespace AgentR.Shared;
 [JsonDerivedType(typeof(ThinkingFrame), "thinking")]
 [JsonDerivedType(typeof(MessageFrame), "message")]
 [JsonDerivedType(typeof(InterruptFrame), "interrupt")]
-// MESSAGEPACK POLYMORPHISM SETUP:
-[MessagePackObject] 
+[JsonDerivedType(typeof(DiscoveryFrame), "discovery")]
+[JsonDerivedType(typeof(ToolRequestFrame), "tool_request")]
+[JsonDerivedType(typeof(ToolResponseFrame), "tool_response")]
 [Union(0, typeof(TurnGrantedFrame))]
 [Union(1, typeof(ThinkingFrame))]
 [Union(2, typeof(MessageFrame))]
 [Union(3, typeof(InterruptFrame))]
+[Union(4, typeof(AssignmentFrame))]
+[Union(5, typeof(DiscoveryFrame))]
+[Union(6, typeof(ToolRequestFrame))]
+[Union(7, typeof(ToolResponseFrame))]
 public abstract record AgentFrame
 {
-    [Key(0)] // Explicit Index for MessagePack
     public required string SenderId { get; init; }
-    
-    [Key(1)]
     public required string RoomId { get; init; }
-    
-    [Key(2)]
     public long Timestamp { get; init; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 }
 
-[MessagePackObject]
+[MessagePackObject(keyAsPropertyName: true)]
 public record TurnGrantedFrame : AgentFrame
 {
-    // No extra fields, but acts as a unique type
+    // No extra fields
 }
 
-[MessagePackObject]
+[MessagePackObject(keyAsPropertyName: true)]
 public record ThinkingFrame : AgentFrame
 {
-    [Key(3)] // Continue the index count from Base (Base used 0,1,2)
     public required string Content { get; init; }
 }
 
-[MessagePackObject]
+[MessagePackObject(keyAsPropertyName: true)]
 public record MessageFrame : AgentFrame
 {
-    [Key(3)]
     public required string Content { get; init; }
 }
 
-[MessagePackObject]
+[MessagePackObject(keyAsPropertyName: true)]
 public record InterruptFrame : AgentFrame
 {
-    [Key(3)]
     public required string Reason { get; init; }
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
+public record AssignmentFrame : AgentFrame
+{
+    public required string NewRoomId { get; init; }
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
+public record DiscoveryFrame : AgentFrame
+{
+    public required List<RoomInfo> Rooms { get; init; }
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
+public record ToolRequestFrame : AgentFrame
+{
+    public required string RequestId { get; init; } 
+    public required string ServerName { get; init; }
+    public required string ToolName { get; init; }
+    public required string ArgumentsJson { get; init; }
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
+public record ToolResponseFrame : AgentFrame
+{
+    public required string RequestId { get; init; }
+    public bool Success { get; init; }
+    public required string ResultJson { get; init; }
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
+public record RoomInfo
+{
+    public required string RoomId { get; init; }
+    public string[] Tags { get; init; } = Array.Empty<string>();
+    public int AgentCount { get; init; }
 }
 
 // SignalR Client Interface

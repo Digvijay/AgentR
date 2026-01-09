@@ -1,21 +1,40 @@
 import logging
-import threading
-import time
+import asyncio
+import json
+import uuid
+from typing import Optional, Callable, Dict, Any, Awaitable
 from signalrcore.hub_connection_builder import HubConnectionBuilder
-from signalrcore.protocol.messagepack_protocol import MessagePackHubProtocol
+from .frames import (
+    AgentFrame, ToolResponseFrame, RoomInfo
+)
+
+# Type alias for async callbacks
+AsyncCallback = Callable[..., Awaitable[None]]
 
 class AgentRClient:
-    def __init__(self, hub_url, agent_id, access_token):
+    def __init__(self, hub_url: str, agent_id: str, access_token: str):
         self.agent_id = agent_id
-        self.stop_event = threading.Event()
-        self.on_turn_granted = None # Callback function
+        try:
+            self.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            
+        self._pending_requests: Dict[str, asyncio.Future] = {}
+        
+        # Events (Callbacks must be async or bridged)
+        self.on_turn_granted: Optional[AsyncCallback] = None 
+        self.on_assignment: Optional[Callable[[str], Awaitable[None]]] = None
+        self.on_discovery: Optional[Callable[[list[RoomInfo]], Awaitable[None]]] = None
+        
+        self.current_room: Optional[str] = None
+        self._connected_event = asyncio.Event()
 
-        # Configure SignalR
+        # Configure SignalR (JSON Protocol by default for max compatibility)
         self.hub_connection = HubConnectionBuilder()\
             .with_url(hub_url, options={
                 "access_token_factory": lambda: access_token
             })\
-            .with_hub_protocol(MessagePackHubProtocol())\
             .with_automatic_reconnect({
                 "type": "raw",
                 "keep_alive_interval": 10,
@@ -24,59 +43,143 @@ class AgentRClient:
             })\
             .build()
 
-        # Wire up listeners
-        self.hub_connection.on("ReceiveSignal", self._handle_signal)
-        self.hub_connection.on_open(lambda: logging.info("✅ Connected to AgentR Hub!"))
+        self.hub_connection.on("ReceiveSignal", self._handle_signal_wrapper)
+        self.hub_connection.on_open(lambda: self.loop.call_soon_threadsafe(self._connected_event.set))
         self.hub_connection.on_close(lambda: logging.info("❌ Disconnected"))
 
-    def connect(self):
+    async def connect(self):
+        """Starts the connection and waits for the handshake."""
         self.hub_connection.start()
-        time.sleep(1) # Give it a sec to handshake
-        self.hub_connection.send("JoinRoom", ["PythonRoom"])
+        await self._connected_event.wait()
+        logging.info("✅ Connected to AgentR Hub (Async)!")
 
-    def request_turn(self):
-        logging.info("✋ Requesting turn...")
-        self.hub_connection.send("RequestTurn", ["PythonRoom"])
+    async def join_room(self, room_id: str, tags: list[str] = None):
+        logging.info(f"🚪 Joining room: {room_id}...")
+        self.current_room = room_id
+        self.hub_connection.send("JoinRoom", [room_id, tags or []])
 
-    def emit_thinking(self, content):
-        if self.stop_event.is_set():
-            return # Don't send if interrupted
+    async def leave_room(self, room_id: str):
+        if self.current_room == room_id:
+            self.current_room = None
+        self.hub_connection.send("LeaveRoom", [room_id])
+
+    async def request_turn(self, room_id: str = None):
+        target = room_id or self.current_room
+        logging.info(f"✋ Requesting turn in {target}...")
+        self.hub_connection.send("RequestTurn", [target])
+
+    async def request_agent(self, agent_type: str):
+        logging.info(f"⏳ Requesting agent type: {agent_type}...")
+        self.hub_connection.send("RequestAgent", [agent_type])
+
+    async def invoke_tool(self, room_id: str, server: str, tool: str, args: dict, timeout: float = 30.0) -> str:
+        """
+        Invokes an MCP tool and waits for the result (Architect's Pattern).
+        """
+        request_id = str(uuid.uuid4())
+        # SAFETY: Always get the loop intrinsic to this coroutine execution
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
         
-        # Send JSON frame (Server handles JSON/MessagePack interop automatically)
-        self.hub_connection.send("Broadcast", [{
-            "$type": "thinking",
+        self._pending_requests[request_id] = future
+        
+        logging.info(f"🔌 Invoking tool {server}/{tool} [{request_id}]...")
+        
+        self.hub_connection.send("InvokeTool", [{
             "SenderId": self.agent_id,
-            "RoomId": "PythonRoom",
+            "RoomId": room_id,
+            "RequestId": request_id,
+            "ServerName": server,
+            "ToolName": tool,
+            "ArgumentsJson": json.dumps(args)
+        }])
+
+        try:
+            # Wait for response with timeout
+            result_json = await asyncio.wait_for(future, timeout)
+            return result_json
+        except asyncio.TimeoutError:
+            del self._pending_requests[request_id]
+            raise TimeoutError(f"Tool {tool} timed out after {timeout}s")
+
+    async def emit_thinking(self, content: str, room_id: str = None):
+        target = room_id or self.current_room
+        self._emit_frame("thinking", target, content)
+
+    async def emit_message(self, content: str, room_id: str = None):
+        target = room_id or self.current_room
+        self._emit_frame("message", target, content)
+
+    def _emit_frame(self, frame_type: str, room_id: str, content: str):
+        self.hub_connection.send("Broadcast", [{
+            "$type": frame_type,
+            "SenderId": self.agent_id,
+            "RoomId": room_id,
             "Content": content
         }])
 
-    def release_turn(self):
-        self.hub_connection.send("ReleaseTurn", ["PythonRoom"])
+    # --- Internals ---
 
-    def _handle_signal(self, args):
+    async def release_turn(self, room_id: str = None):
+        target = room_id or self.current_room
+        logging.info(f"🏳️ Releasing turn in {target}...")
+        self.hub_connection.send("ReleaseTurn", [target])
+
+    # --- Internals ---
+
+    def _handle_signal_wrapper(self, args):
+        """Bridge signalrcore thread -> asyncio loop."""
+        if not args: return
         frame = args[0]
-        # Infer type based on fields (Duck Typing) since $type is missing in MessagePack
+        # Schedule the coroutine on the loop
+        asyncio.run_coroutine_threadsafe(self._handle_signal(frame), self.loop)
+
+    async def _handle_signal(self, frame: AgentFrame):
+        sender = frame.get("SenderId")
+        content = frame.get("Content")
         
-        # 1. Interrupt
-        if "Reason" in frame:
-            reason = frame.get("Reason", "Unknown")
-            logging.warning(f"⚡ INTERRUPT RECEIVED: {reason}")
-            self.stop_event.set()
+        # 1. Tool Response
+        if "RequestId" in frame and sender == "GATEWAY":
+            req_id = frame.get("RequestId")
+            if req_id in self._pending_requests:
+                future = self._pending_requests.pop(req_id)
+                success = frame.get("Success", False)
+                result = frame.get("ResultJson", "{}")
+                
+                if success:
+                    future.set_result(result)
+                else:
+                    future.set_exception(Exception(f"Tool Limit/Error: {result}"))
+            return
 
-        # 2. Thinking / Content
-        elif "Content" in frame:
-            sender = frame.get("SenderId")
-            content = frame.get("Content")
-            
-            # Special case: Host sending BUSY message?
-            if sender == "HOST" and "BUSY" in content:
-                 logging.warning(f"⚠️ {content}")
-            elif sender != self.agent_id:
-                print(f"[{sender}]: {content}", end="", flush=True)
+        # 2. Assignment
+        if "NewRoomId" in frame:
+            new_room = frame.get("NewRoomId")
+            if self.on_assignment:
+                await self.on_assignment(new_room)
+            else:
+                await self.join_room(new_room)
+            return
 
-        # 3. Turn Granted (Host, No Content, No Reason)
-        elif frame.get("SenderId") == "HOST":
-            logging.info("🎤 Turn Granted! Starting work...")
-            self.stop_event.clear()
+        # 3. Discovery
+        if "Rooms" in frame:
+             if self.on_discovery:
+                 await self.on_discovery(frame.get("Rooms"))
+             return
+
+        # 4. Turn Granted
+        if sender == "HOST" and not content:
             if self.on_turn_granted:
-                threading.Thread(target=self.on_turn_granted, args=(self.stop_event,)).start()
+                try:
+                    # We do NOT run this in a thread anymore; asyncio handles it!
+                    await self.on_turn_granted()
+                except Exception as e:
+                    logging.error(f"❌ Error during turn execution: {e}")
+                finally:
+                    # Auto-Release Turn to prevent Zombie Agents
+                    await self.release_turn(frame.get("RoomId"))
+            return
+        
+        # 5. Output for CLI
+        if content and sender != self.agent_id:
+             print(f"[{sender}]: {content}")

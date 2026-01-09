@@ -1,0 +1,291 @@
+@page "/discovery"
+@using AgentR.Client
+@using AgentR.Shared
+@inject AgentClient Agent
+@rendermode InteractiveServer
+
+<PageTitle>AgentR | Room Discovery</PageTitle>
+
+<div class="discovery-container">
+    <div class="discovery-header">
+        <h1>📡 Global Room Discovery</h1>
+        <p>Scan and orchestrate active agent environments across the cluster.</p>
+    </div>
+
+    <div class="search-bar">
+        <div class="input-group">
+            <span class="bi bi-search"></span>
+            <input type="text" placeholder="Filter by Tags (e.g. production, python)..." 
+                   @bind="tagFilter" @bind:event="oninput" @onkeyup="HandleKeyUp" />
+        </div>
+        <div class="stats">
+            <span class="badge">@rooms.Count Rooms Active</span>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loader-container">
+            <div class="pulse"></div>
+            <p>Scanning Redis backplane...</p>
+        </div>
+    }
+    else
+    {
+        <div class="room-grid">
+            @foreach (var room in rooms)
+            {
+                <div class="room-card @(room.AgentCount > 5 ? "high-load" : "")" @onclick="() => SelectRoom(room.RoomId)">
+                    <div class="room-status">
+                        <span class="pulse-dot"></span>
+                        LIVE
+                    </div>
+                    <div class="room-main">
+                        <h3>@room.RoomId</h3>
+                        <div class="tags">
+                            @foreach (var tag in room.Tags)
+                            {
+                                <span class="tag">#@tag</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="room-footer">
+                        <div class="agent-count">
+                            <span class="bi bi-people-fill"></span>
+                            <strong>@room.AgentCount</strong> Agents
+                        </div>
+                        <button class="join-btn" @onclick:stopPropagation="true" @onclick="() => JoinRoom(room.RoomId)">
+                            JOIN ROOM
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (selectedRoomId != null)
+    {
+        <div class="audit-drawer @(isDrawerOpen ? "open" : "")">
+            <div class="drawer-header">
+                <h3>🔍 Inspecting: @selectedRoomId</h3>
+                <button class="close-btn" @onclick="() => isDrawerOpen = false">×</button>
+            </div>
+            <div class="drawer-content">
+                <p>Establishing secure audit trail to <b>@selectedRoomId</b>...</p>
+                <div class="mock-audit-feed">
+                    <div class="feed-line">Connecting to Hub...</div>
+                    <div class="feed-line">Retrieving distributed locks...</div>
+                    <div class="feed-line">FinOps Quota: VALID</div>
+                    <div class="feed-line success">READY TO OBSERVE.</div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<RoomInfo> rooms = new();
+    private string tagFilter = "";
+    private bool isLoading = true;
+    private string? selectedRoomId = null;
+    private bool isDrawerOpen = false;
+    private System.Threading.Timer? refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Agent.OnDiscoveryResults += results => {
+            rooms = results;
+            isLoading = false;
+            InvokeAsync(StateHasChanged);
+        };
+
+        await Agent.ConnectAsync();
+        
+        // Initial scan
+        await Refresh();
+
+        // Auto-refresh every 5 seconds
+        refreshTimer = new System.Threading.Timer(async _ => {
+            await Refresh();
+        }, null, 5000, 5000);
+    }
+
+    private async Task Refresh()
+    {
+        var tags = string.IsNullOrWhiteSpace(tagFilter) 
+            ? null 
+            : tagFilter.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        
+        await Agent.ListRoomsAsync(tags);
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Refresh();
+        }
+    }
+
+    private void SelectRoom(string id)
+    {
+        selectedRoomId = id;
+        isDrawerOpen = true;
+    }
+
+    private async Task JoinRoom(string id)
+    {
+        await Agent.JoinRoomAsync(id);
+        // In a real demo, we'd navigate to a room-specific view
+        // For now, we show a success notification
+        selectedRoomId = id;
+        isDrawerOpen = true;
+    }
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+    }
+}
+
+<style>
+    .discovery-container {
+        padding: 2rem;
+        background: #0d1117;
+        min-height: 95vh;
+        color: #e6edf3;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .discovery-header { text-align: center; margin-bottom: 3rem; }
+    .discovery-header h1 { font-size: 2.5rem; font-weight: 800; color: #58a6ff; margin-bottom: 0.5rem; }
+    .discovery-header p { color: #8b949e; font-size: 1.1rem; }
+
+    .search-bar {
+        max-width: 800px;
+        margin: 0 auto 3rem;
+        display: flex;
+        gap: 15px;
+        align-items: center;
+    }
+
+    .input-group {
+        flex: 1;
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 0.8rem 1.2rem;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: all 0.3s;
+    }
+
+    .input-group:focus-within { border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2); }
+    .input-group input { background: transparent; border: none; color: white; width: 100%; outline: none; font-size: 1.1rem; }
+    
+    .badge { background: #238636; color: white; padding: 0.5rem 1rem; border-radius: 20px; font-weight: bold; font-size: 0.9rem; }
+
+    .room-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .room-card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 16px;
+        padding: 1.5rem;
+        position: relative;
+        cursor: pointer;
+        transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .room-card:hover { transform: translateY(-5px); border-color: #58a6ff; }
+    .room-card.high-load { border-left: 5px solid #d29922; }
+
+    .room-status { font-size: 0.7rem; font-weight: 800; color: #3fb950; display: flex; align-items: center; gap: 5px; margin-bottom: 1rem; }
+    .pulse-dot { width: 8px; height: 8px; background: #3fb950; border-radius: 50%; box-shadow: 0 0 5px #3fb950; animation: pulse 2s infinite; }
+    
+    @@keyframes pulse { 
+        0% { opacity: 1; }
+        50% { opacity: 0.4; }
+        100% { opacity: 1; }
+    }
+
+    .room-main h3 { margin: 0 0 10px 0; color: #f0f6fc; font-size: 1.4rem; }
+    .tags { display: flex; flex-wrap: wrap; gap: 5px; min-height: 50px; }
+    .tag { background: #010409; color: #8b949e; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #30363d; }
+
+    .room-footer { 
+        margin-top: 2rem; 
+        padding-top: 1rem; 
+        border-top: 1px solid #30363d; 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+    }
+    
+    .agent-count { color: #8b949e; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
+    .agent-count strong { color: #f0f6fc; font-size: 1.1rem; }
+
+    .join-btn {
+        padding: 0.5rem 1rem;
+        background: #238636;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .join-btn:hover { background: #2ea043; }
+
+    /* AUDIT DRAWER */
+    .audit-drawer {
+        position: fixed;
+        right: -400px;
+        top: 0;
+        bottom: 0;
+        width: 400px;
+        background: #010409;
+        border-left: 1px solid #30363d;
+        box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+        z-index: 1000;
+        padding: 2rem;
+        transition: right 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .audit-drawer.open { right: 0; }
+
+    .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    .drawer-header h3 { margin: 0; color: #58a6ff; }
+    .close-btn { background: transparent; border: none; color: #8b949e; font-size: 1.5rem; cursor: pointer; }
+
+    .mock-audit-feed {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 1rem;
+        flex: 1;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+    }
+    .feed-line { margin-bottom: 8px; color: #8b949e; }
+    .feed-line.success { color: #3fb950; font-weight: bold; }
+
+    .loader-container { text-align: center; margin-top: 5rem; }
+    .pulse { width: 60px; height: 60px; border: 4px solid #58a6ff; border-radius: 50%; margin: 0 auto 1rem; animation: pulse-ring 1.5s infinite; }
+    
+    @@keyframes pulse-ring {
+        0% { transform: scale(0.8); opacity: 0; }
+        50% { opacity: 0.5; }
+        100% { transform: scale(1.2); opacity: 0; }
+    }
+</style>

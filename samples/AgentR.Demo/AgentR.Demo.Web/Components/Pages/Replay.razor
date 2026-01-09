@@ -1,0 +1,141 @@
+@page "/replay"
+@using AgentR.Shared
+@using AgentR.Demo.Web.Auditing
+@inject AuditClient AuditClient
+@rendermode InteractiveServer
+
+<PageTitle>Session Replay</PageTitle>
+
+<div class="replay-container">
+    <h1>📼 Session Replay</h1>
+    <p>Enter a Room ID to watch the conversation replay millisecond by millisecond.</p>
+
+    <div class="search-box">
+        <input @bind="roomId" placeholder="Enter Room ID (e.g., test-room)" @onkeyup="HandleKeyUp" />
+        <button @onclick="LoadReplay" disabled="@isLoggingIn">Fetch Logs</button>
+    </div>
+
+    @if (records != null)
+    {
+        <div class="replay-controls">
+            <button @onclick="Play" disabled="@isPlaying">▶️ Play</button>
+            <button @onclick="Pause" disabled="@(!isPlaying)">⏸️ Pause</button>
+            <button @onclick="Reset">🔄 Reset</button>
+            <span class="status">Step: @currentIndex / @records.Count</span>
+        </div>
+
+        <div class="log-viewer">
+            @foreach (var record in displayedRecords)
+            {
+                <div class="log-entry @record.EventType.ToLower()">
+                    <span class="time">@record.Timestamp.ToString("HH:mm:ss.fff")</span>
+                    <span class="agent">@record.AgentId</span>
+                    <span class="event">@record.EventType</span>
+                    <span class="content">@record.Content</span>
+                </div>
+            }
+        </div>
+    }
+    else if (isLoggingIn)
+    {
+        <p>Loading logs...</p>
+    }
+</div>
+
+@code {
+    private string roomId = "test-room";
+    private List<AuditRecord>? records;
+    private List<AuditRecord> displayedRecords = new();
+    private int currentIndex = 0;
+    private bool isPlaying = false;
+    private bool isLoggingIn = false;
+
+    private void HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _ = LoadReplay();
+        }
+    }
+
+    private async Task LoadReplay()
+    {
+        isLoggingIn = true;
+        records = null;
+        displayedRecords.Clear();
+        currentIndex = 0;
+        isPlaying = false;
+        
+        try
+        {
+            records = await AuditClient.GetReplayAsync(roomId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading logs: {ex.Message}");
+        }
+        finally
+        {
+            isLoggingIn = false;
+        }
+    }
+
+    private async Task Play()
+    {
+        if (records == null || isPlaying) return;
+        isPlaying = true;
+
+        while (isPlaying && currentIndex < records.Count)
+        {
+            var current = records[currentIndex];
+            displayedRecords.Insert(0, current); // Show newest at top
+            if (displayedRecords.Count > 50) displayedRecords.RemoveAt(50);
+            
+            currentIndex++;
+            StateHasChanged();
+
+            // Simulate timing
+            if (currentIndex < records.Count)
+            {
+                var next = records[currentIndex];
+                var delay = (int)(next.Timestamp - current.Timestamp).TotalMilliseconds;
+                await Task.Delay(Math.Clamp(delay, 50, 1000));
+            }
+        }
+
+        isPlaying = false;
+    }
+
+    private void Pause() => isPlaying = false;
+
+    private void Reset()
+    {
+        isPlaying = false;
+        currentIndex = 0;
+        displayedRecords.Clear();
+    }
+}
+
+<style>
+    .replay-container { max-width: 900px; margin: 0 auto; padding: 20px; font-family: 'Inter', sans-serif; }
+    .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
+    .search-box input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
+    .search-box button { padding: 10px 20px; border-radius: 8px; background: #6366f1; color: white; border: none; cursor: pointer; }
+    
+    .replay-controls { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+    .replay-controls button { padding: 8px 16px; border-radius: 6px; border: 1px solid #ddd; background: #f9fafb; cursor: pointer; }
+    .status { font-size: 0.9rem; color: #666; }
+
+    .log-viewer { background: #1e293b; color: #f8fafc; padding: 20px; border-radius: 12px; height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .log-entry { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; padding: 8px; border-radius: 4px; display: flex; gap: 15px; border-left: 4px solid transparent; }
+    
+    .log-entry.thinkingframe { border-left-color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
+    .log-entry.messageframe { border-left-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+    .log-entry.turnrequested { border-left-color: #6366f1; background: rgba(99, 102, 241, 0.1); }
+    .log-entry.interruptframe { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+
+    .time { color: #94a3b8; min-width: 100px; }
+    .agent { color: #38bdf8; font-weight: bold; min-width: 100px; }
+    .event { color: #f472b6; min-width: 120px; }
+    .content { flex: 1; word-break: break-all; }
+</style>

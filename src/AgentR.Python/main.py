@@ -1,61 +1,73 @@
-import time
 import logging
-import sys
-import jwt
-from agentr import AgentRClient
+import asyncio
+import os
+from agentr.client import AgentRClient
 
 # Configure Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-
-# Configuration (Match your .NET Server settings!)
-HUB_URL = "http://localhost:5000/agentHub"
-
-# --- AUTHENTICATION ---
-# Generate valid JWT using the shared secret
-SECRET_KEY = "ThisIsMySuperSecretKeyForAgentR_MustBe32CharsLong!"
-encoded_jwt = jwt.encode(
-    {"sub": "Python-Bot-01", "name": "Python-Bot-01"}, 
-    SECRET_KEY, 
-    algorithm="HS256"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
 )
-ACCESS_TOKEN = encoded_jwt
-print(f"🔑 Generated Auth Token: {ACCESS_TOKEN[:10]}...")
 
-def agent_behavior(stop_event):
-    """
-    This represents the 'Brain'. It could be LangChain, AutoGen, or raw Python code.
-    """
-    poem = "The zen of python is beautiful explicit and simple...".split()
-    
+async def main():
+    agent_id = "Python-Agent-007"
+    hub_url = "http://localhost:5000/agentHub"
+    token = "secret-api-key"
+
+    client = AgentRClient(hub_url, agent_id, token)
+
+    # --- Agent Logic ---
+
+    async def on_turn_granted():
+        """
+        Main Agent Loop: Thinking -> Tool Use -> Final Answer
+        """
+        logging.info("🧠 Thinking process started...")
+        
+        # 1. Emit some thoughts
+        await client.emit_thinking("I need to check the repo status.")
+        await asyncio.sleep(1) # Simulate LLM latency
+        
+        try:
+            # 2. Call a Tool (Awaitable!)
+            result = await client.invoke_tool(
+                room_id=client.current_room, 
+                server="github", 
+                tool="get_issue", 
+                args={"id": 42},
+                timeout=10.0
+            ) 
+            logging.info(f"🔧 Tool Result: {result}")
+            
+            await client.emit_thinking(f"I found the issue: {result}")
+
+            # 3. Final Answer
+            await client.emit_message("The issue is confirmed and being triaged.")
+            
+        except TimeoutError:
+             await client.emit_message("I tried to check GitHub, but the tool timed out.")
+        except Exception as e:
+             logging.error(f"Logic Error: {e}")
+             await client.emit_message("Something went wrong processing your request.")
+
+    # Wire up callbacks
+    client.on_turn_granted = on_turn_granted
+
+    # --- Connection Sequence ---
     try:
-        for word in poem:
-            # 1. Check Interrupt
-            if stop_event.is_set():
-                logging.error("🛑 STOPPING WORK IMMEDIATELY")
-                return
-
-            # 2. Network IO
-            client.emit_thinking(f"{word} ")
-            sys.stdout.write(f"{word} ")
-            sys.stdout.flush()
-
-            # 3. Simulate Think Time
-            time.sleep(0.5)
-
-        client.release_turn()
-        logging.info("\n✅ Finished speaking.")
-
-    except Exception as e:
-        logging.error(f"Error: {e}")
+        await client.connect()
+        await client.join_room("General")
+        
+        # Keep the agent alive
+        while True:
+            await asyncio.sleep(1)
+            
+    except KeyboardInterrupt:
+        await client.leave_room("General")
+        logging.info("👋 Agent shutting down.")
 
 if __name__ == "__main__":
-    client = AgentRClient(HUB_URL, "Python-Bot-01", ACCESS_TOKEN)
-    client.connect()
-
-    # Define what happens when we get the mic
-    client.on_turn_granted = agent_behavior
-
-    # Main Loop
-    while True:
-        input("\n[Press Enter] to Request Turn...")
-        client.request_turn()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

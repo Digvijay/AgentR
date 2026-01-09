@@ -11,8 +11,8 @@
     <Title>AgentR Worker Template</Title>
     <Authors>Digvijay</Authors>
     <PackageIcon>icon.png</PackageIcon>
-    <PackageProjectUrl>https://github.com/digvijay/AgentR</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/digvijay/AgentR</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Digvijay/AgentR</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Digvijay/AgentR</RepositoryUrl>
     <Description>Standard template for building AgentR-compatible AI workers. Includes SignalR connectivity, JWT auth, and optional Semantic Kernel integration.</Description>
     <PackageTags>dotnet-new;templates;AgentR;AI;agents</PackageTags>
     <IncludeContentInPack>true</IncludeContentInPack>
@@ -23,7 +23,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AgentR.Client" Version="1.0.0" />
+    <PackageReference Include="AgentR.Client" Version="1.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.0" />
 <!--#if (UseSemanticKernel) -->
     <PackageReference Include="Microsoft.SemanticKernel" Version="1.0.1" />

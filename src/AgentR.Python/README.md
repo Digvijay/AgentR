@@ -41,3 +41,6 @@ client.request_turn()
 - ✅ MessagePack Protocol
 - ✅ Remote Interruption via `stop_event`
 - ✅ Turn-based Concurrency
+- ✅ Flight Recorder (Auditing) Support: Python agents benefit from the Hub's automatic frame logging and compliance trails.
+- ✅ KEDA / Lobby Ready: Compatible with event-driven "Scale-to-Zero" architectures when paired with the Hub's assignment logic.
+- ✅ FinOps / Budget Aware: Automatically subject to the server's quota management and "Toll Booth" pricing.

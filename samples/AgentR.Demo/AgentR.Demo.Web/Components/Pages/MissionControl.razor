@@ -1,0 +1,246 @@
+@page "/mission-control"
+@using AgentR.Client
+@using AgentR.Shared
+@inject AgentClient Agent
+@rendermode InteractiveServer
+
+<PageTitle>AgentR | Mission Control</PageTitle>
+
+<div class="mc-container">
+    <div class="mc-header">
+        <h1>🛡️ Strategic Operations Center</h1>
+        <p>Real-time Governance, FinOps, and Connectivity Layer.</p>
+    </div>
+
+    <div class="mc-grid">
+        <!-- COLUMN 1: FINOPS -->
+        <div class="mc-card finops">
+            <div class="card-header">
+                <span class="bi bi-cash-coin"></span> 
+                <h2>FinOps Budget Controller</h2>
+            </div>
+            
+            <div class="gauge-container">
+                <svg viewBox="0 0 100 50" class="gauge">
+                    <path class="bg" d="M 10 45 A 35 35 0 0 1 90 45" />
+                    <path class="progress" d="M 10 45 A 35 35 0 0 1 90 45" style="stroke-dasharray: @(126 * balance / 1000), 126" />
+                </svg>
+                <div class="balance-display">
+                    <span class="amount">@balance</span>
+                    <span class="unit">CREDITS</span>
+                </div>
+            </div>
+
+            <div class="mc-actions">
+                <button class="btn-primary" @onclick="TopUp">Recharge +500</button>
+            </div>
+
+            <div class="mc-log">
+                <h3>Consumption Trail</h3>
+                <div class="log-entries">
+                    @foreach (var log in budgetLogs)
+                    {
+                        <div class="log-entry @(log.Contains("RECHARGE") ? "success" : "warning")">
+                            @log
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- COLUMN 2: MCP GATEWAY -->
+        <div class="mc-card mcp">
+            <div class="card-header">
+                <span class="bi bi-gpu-card"></span>
+                <h2>MCP Tool Gateway</h2>
+            </div>
+
+            <div class="mcp-viz">
+                <div class="viz-step @(activeStep == 1 ? "active" : "")">
+                    <div class="icon">🤖</div>
+                    <div class="label">Agent</div>
+                </div>
+                <div class="viz-line @(activeStep >= 2 ? "active" : "")">
+                    <div class="arrow"></div>
+                    <div class="label">ToolRequest</div>
+                </div>
+                <div class="viz-step hub @(activeStep == 2 ? "active" : "")">
+                    <div class="icon">🛡️</div>
+                    <div class="label">Hub</div>
+                </div>
+                <div class="viz-line @(activeStep >= 3 ? "active" : "")">
+                    <div class="arrow"></div>
+                    <div class="label">MCP Handshake</div>
+                </div>
+                <div class="viz-step tool @(activeStep == 3 ? "active" : "")">
+                    <div class="icon">🔌</div>
+                    <div class="label">GitHub</div>
+                </div>
+            </div>
+
+            <div class="mc-actions">
+                <button class="btn-secondary" @onclick="SimulateToolCall" disabled="@(activeStep > 0)">Simulate Tool Handshake</button>
+            </div>
+
+            <div class="mc-log">
+                <h3>Gateway Manifest</h3>
+                <div class="log-entries">
+                    @foreach (var log in gatewayLogs)
+                    {
+                        <div class="log-entry info">
+                            @log
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private long balance = 0;
+    private int activeStep = 0;
+    private List<string> budgetLogs = new();
+    private List<string> gatewayLogs = new();
+    private string roomId = "mission-control-room";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Agent.OnLog += (msg) => {
+            if (msg.Contains("CREDITS") || msg.Contains("RECHARGE")) budgetLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {msg}");
+            InvokeAsync(StateHasChanged);
+        };
+
+        Agent.OnSignalReceived += async frame => {
+            if (frame is ToolRequestFrame tr) {
+                gatewayLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 🔌 Handshake: {tr.ServerName}/{tr.ToolName} requested by {tr.SenderId}");
+                await TriggerViz(tr.ServerName);
+                await UpdateBalance();
+            }
+            if (frame is ToolResponseFrame resp) {
+                gatewayLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] ✅ Tool Result: Success={resp.Success}");
+                await UpdateBalance();
+            }
+            if (frame is MessageFrame m && m.SenderId == "FINOPS") {
+                 budgetLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {m.Content}");
+                 await UpdateBalance();
+            }
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await Agent.ConnectAsync();
+        await Agent.JoinRoomAsync(roomId);
+        await UpdateBalance();
+        gatewayLogs.Insert(0, "System Ready. Connectivity layer active.");
+        budgetLogs.Insert(0, "Budget Controller active. Room credits synced.");
+    }
+
+    private async Task UpdateBalance()
+    {
+        balance = await Agent.GetBalanceAsync(roomId);
+        StateHasChanged();
+    }
+
+    private async Task TopUp()
+    {
+        await Agent.TopUpAsync(roomId, 500);
+        await UpdateBalance();
+    }
+
+    private async Task SimulateToolCall()
+    {
+        // We act as an agent directly for the demo
+        await Agent.CallToolAsync(roomId, "github", "get_issue", new { id = 42 });
+    }
+
+    private async Task TriggerViz(string server)
+    {
+        activeStep = 1; StateHasChanged();
+        await Task.Delay(800);
+        activeStep = 2; StateHasChanged();
+        await Task.Delay(800);
+        activeStep = 3; StateHasChanged();
+        await Task.Delay(2000);
+        activeStep = 0; StateHasChanged();
+    }
+}
+
+<style>
+    .mc-container {
+        padding: 2rem;
+        background: #0d1117;
+        min-height: 90vh;
+        color: #e6edf3;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .mc-header { text-align: center; margin-bottom: 3rem; }
+    .mc-header h1 { font-size: 2.5rem; font-weight: 800; color: #58a6ff; margin-bottom: 0.5rem; }
+    .mc-header p { color: #8b949e; font-size: 1.1rem; }
+
+    .mc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .mc-card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .card-header { display: flex; align-items: center; gap: 15px; margin-bottom: 2rem; border-bottom: 1px solid #30363d; padding-bottom: 1rem; }
+    .card-header h2 { font-size: 1.5rem; margin: 0; color: #f0f6fc; }
+    .card-header span { font-size: 1.8rem; color: #58a6ff; }
+
+    /* GAUGE */
+    .gauge-container { position: relative; width: 200px; margin: 0 auto 2rem; }
+    .gauge { width: 100%; height: auto; }
+    .gauge .bg { fill: none; stroke: #30363d; stroke-width: 8; stroke-linecap: round; }
+    .gauge .progress { fill: none; stroke: #238636; stroke-width: 8; stroke-linecap: round; transition: stroke-dasharray 0.5s ease; filter: drop-shadow(0 0 5px #238636); }
+    
+    .balance-display { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; }
+    .balance-display .amount { display: block; font-size: 2rem; font-weight: 800; color: #f0f6fc; }
+    .balance-display .unit { font-size: 0.7rem; color: #8b949e; letter-spacing: 2px; }
+
+    /* MCP VIZ */
+    .mcp-viz { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; padding: 1rem; background: #010409; border-radius: 10px; }
+    .viz-step { display: flex; flex-direction: column; align-items: center; opacity: 0.3; transition: all 0.3s; }
+    .viz-step.active { opacity: 1; transform: scale(1.1); }
+    .viz-step .icon { font-size: 2rem; margin-bottom: 5px; }
+    .viz-step .label { font-size: 0.7rem; color: #8b949e; }
+    .viz-step.active .label { color: #58a6ff; font-weight: bold; }
+
+    .viz-line { flex: 1; height: 1px; background: #30363d; margin: 0 10px; position: relative; opacity: 0.3; }
+    .viz-line.active { background: #58a6ff; opacity: 1; box-shadow: 0 0 10px #58a6ff; }
+    .viz-line .arrow { position: absolute; right: 0; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #30363d; }
+    .viz-line.active .arrow { border-left-color: #58a6ff; }
+    .viz-line .label { position: absolute; top: -15px; width: 100%; text-align: center; font-size: 0.6rem; color: #8b949e; }
+
+    /* ACTIONS */
+    .mc-actions { display: flex; gap: 1rem; margin-bottom: 2rem; }
+    button { flex: 1; padding: 0.8rem; border-radius: 6px; font-weight: bold; cursor: pointer; border: none; transition: 0.2s; }
+    .btn-primary { background: #238636; color: white; }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-secondary { background: #30363d; color: #c9d1d9; border: 1px solid #8b949e; }
+    .btn-secondary:hover { background: #8b949e; color: #0d1117; }
+
+    /* LOGS */
+    .mc-log h3 { font-size: 0.9rem; color: #8b949e; margin-bottom: 0.8rem; text-transform: uppercase; }
+    .log-entries { height: 180px; overflow-y: auto; background: #010409; border-radius: 6px; padding: 0.8rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+    .log-entry { margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #161b22; }
+    .log-entry.success { color: #3fb950; }
+    .log-entry.warning { color: #d29922; }
+    .log-entry.info { color: #58a6ff; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
+</style>

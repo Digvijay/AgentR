@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentR.Demo.ServiceDefaults\AgentR.Demo.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\src\AgentR.Shared\AgentR.Shared.csproj" />
+    <ProjectReference Include="..\..\..\src\AgentR.Client\AgentR.Client.csproj" />
+  </ItemGroup>
+
+</Project>

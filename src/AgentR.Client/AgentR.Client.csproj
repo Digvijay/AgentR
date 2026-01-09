@@ -20,8 +20,8 @@
     <Company>Digvijay</Company>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>NuGetREADME.md</PackageReadmeFile>
-    <PackageProjectUrl>https://github.com/digvijay/AgentR</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/digvijay/AgentR</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Digvijay/AgentR</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Digvijay/AgentR</RepositoryUrl>
     <Description>The high-performance C# SDK for the AgentR Real-time Transport Protocol. Enables distributed AI agents with mutual exclusion and remote interruptibility.</Description>
     <PackageTags>ai;agents;signalr;distributed;concurrency;messaging;messagepack</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

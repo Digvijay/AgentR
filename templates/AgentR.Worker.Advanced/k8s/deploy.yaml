@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentr-worker-advanced
+  labels:
+    app: agentr-worker
+    role: advanced
+spec:
+  selector:
+    matchLabels:
+      app: agentr-worker
+  template:
+    metadata:
+      labels:
+        app: agentr-worker
+    spec:
+      containers:
+      - name: worker
+        image: agentr-worker:latest
+        env:
+        - name: HUB_URL
+          value: "http://agentr-service"
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+# KEDA Autoscaler (Scale-to-Zero)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-scaler
+spec:
+  scaleTargetRef:
+    name: agentr-worker-advanced
+  minReplicaCount: 0  # Enable Scale-to-Zero
+  maxReplicaCount: 10
+  triggers:
+  - type: redis
+    metadata:
+      address: redis-service:6379
+      listName: "agentr:tickets:advanced"
+      listLength: "1"

@@ -1,0 +1,311 @@
+@page "/code-review-demo"
+@using AgentR.Client
+@using AgentR.Shared
+@inject AgentClient Agent
+@rendermode InteractiveServer
+
+<PageTitle>AgentR | Code Review Demo</PageTitle>
+
+<div class="demo-container">
+    <div class="glass-card">
+        <h1>👨‍💻 Code Review Workflow Demo</h1>
+        <p class="subtitle">Watch three AI agents collaborate: <b>Writer → Reviewer → Tester</b></p>
+
+        <div class="workflow-diagram">
+            <div class="agent-box @(currentAgent == "writer" ? "active" : "")">
+                <span class="icon">✍️</span>
+                <div>Code Writer</div>
+                <small>Writes code</small>
+            </div>
+            <div class="arrow">→</div>
+            <div class="agent-box @(currentAgent == "reviewer" ? "active" : "")">
+                <span class="icon">🔍</span>
+                <div>Code Reviewer</div>
+                <small>Reviews quality</small>
+            </div>
+            <div class="arrow">→</div>
+            <div class="agent-box @(currentAgent == "tester" ? "active" : "")">
+                <span class="icon">🧪</span>
+                <div>Code Tester</div>
+                <small>Runs tests</small>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <label>Enter a coding task:</label>
+            <input type="text" @bind="taskDescription" placeholder="e.g., Write a function to calculate fibonacci numbers" class="task-input" />
+            <button class="start-btn @(isRunning ? "disabled" : "")" @onclick="StartWorkflow" disabled="@isRunning">
+                @(isRunning ? "⚙️ Running..." : "🚀 Start Workflow")
+            </button>
+        </div>
+
+        <div class="activity-log">
+            <h3>📋 Activity Log</h3>
+            <div class="log-entries">
+                @foreach (var entry in activityLog)
+                {
+                    <div class="log-entry @entry.Type">
+                        <span class="timestamp">@entry.Timestamp.ToString("HH:mm:ss")</span>
+                        <span class="agent-name">[@entry.Agent]</span>
+                        <span class="message">@entry.Message</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(finalCode))
+        {
+            <div class="result-section">
+                <h3>✅ Final Result</h3>
+                <pre><code>@finalCode</code></pre>
+                @if (!string.IsNullOrEmpty(testResults))
+                {
+                    <div class="test-results">
+                        <h4>Test Results:</h4>
+                        <pre>@testResults</pre>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string taskDescription = "Write a function to calculate fibonacci numbers";
+    private bool isRunning = false;
+    private string currentAgent = "";
+    private List<ActivityEntry> activityLog = new();
+    private string finalCode = "";
+    private string testResults = "";
+    private string roomId = "code-review-demo-room";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Agent.OnSignalReceived += frame =>
+        {
+            if (frame is MessageFrame msg)
+            {
+                AddLog(msg.SenderId, msg.Content);
+                
+                // Update current agent based on who's speaking
+                if (msg.SenderId.Contains("writer")) currentAgent = "writer";
+                else if (msg.SenderId.Contains("reviewer")) currentAgent = "reviewer";
+                else if (msg.SenderId.Contains("tester")) currentAgent = "tester";
+                
+                // Extract code if present
+                if (msg.Content.Contains("```"))
+                {
+                    var codeStart = msg.Content.IndexOf("```") + 3;
+                    var codeEnd = msg.Content.LastIndexOf("```");
+                    if (codeEnd > codeStart)
+                    {
+                        finalCode = msg.Content.Substring(codeStart, codeEnd - codeStart).Trim();
+                    }
+                }
+                
+                // Check if workflow is complete
+                if (msg.Content.Contains("REVIEW_REQUEST"))
+                {
+                    isRunning = true;
+                    currentAgent = "reviewer";
+                    finalCode = msg.Content;
+                }
+                // Check if workflow is complete
+                if (msg.Content.Contains("TEST_REQUEST"))
+                {
+                    isRunning = true;
+                    currentAgent = "tester";
+                    finalCode = msg.Content;
+                }
+                // Check if workflow is complete
+                if (msg.Content.Contains("WORKFLOW_COMPLETE"))
+                {
+                    isRunning = false;
+                    currentAgent = "";
+                    testResults = msg.Content;
+                }
+                
+                StateHasChanged();
+            }
+        };
+
+        await Agent.ConnectAsync();
+        await Agent.JoinRoomAsync(roomId);
+        AddLog("System", "Connected to AgentR Hub. Ready to start workflow.");
+    }
+
+    private async Task StartWorkflow()
+    {
+        isRunning = true;
+        currentAgent = "writer";
+        finalCode = "";
+        testResults = "";
+        activityLog.Clear();
+        
+        AddLog("System", $"Starting workflow: {taskDescription}");
+        
+        // Send task to the room - CodeWriter agent will pick it up
+        await Agent.EmitMessageAsync(roomId, $"TASK: {taskDescription}");
+        
+        StateHasChanged();
+    }
+
+    private void AddLog(string agent, string message)
+    {
+        activityLog.Insert(0, new ActivityEntry(DateTime.Now, agent, message));
+        if (activityLog.Count > 50) activityLog.RemoveAt(50);
+        StateHasChanged();
+    }
+
+    record ActivityEntry(DateTime Timestamp, string Agent, string Message)
+    {
+        public string Type => Agent switch
+        {
+            var a when a.Contains("writer") => "writer",
+            var a when a.Contains("reviewer") => "reviewer",
+            var a when a.Contains("tester") => "tester",
+            _ => "system"
+        };
+    }
+}
+
+<style>
+    .demo-container {
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 90vh;
+    }
+
+    .glass-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        padding: 2rem;
+        color: white;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    .subtitle { color: rgba(255,255,255,0.8); margin-bottom: 2rem; }
+
+    .workflow-diagram {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+        margin: 2rem 0;
+        padding: 2rem;
+        background: rgba(0,0,0,0.2);
+        border-radius: 12px;
+    }
+
+    .agent-box {
+        padding: 1.5rem;
+        background: rgba(255,255,255,0.1);
+        border: 2px solid rgba(255,255,255,0.3);
+        border-radius: 12px;
+        text-align: center;
+        min-width: 150px;
+        transition: all 0.3s ease;
+    }
+
+    .agent-box.active {
+        background: rgba(255,255,255,0.3);
+        border-color: #00ff88;
+        box-shadow: 0 0 20px rgba(0,255,136,0.5);
+        transform: scale(1.1);
+    }
+
+    .agent-box .icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
+    .agent-box small { color: rgba(255,255,255,0.7); }
+    .arrow { font-size: 2rem; color: rgba(255,255,255,0.5); }
+
+    .input-section {
+        margin: 2rem 0;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .input-section label { width: 100%; font-weight: bold; }
+    
+    .task-input {
+        flex: 1;
+        padding: 0.75rem;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-radius: 8px;
+        background: rgba(255,255,255,0.1);
+        color: white;
+        font-size: 1rem;
+    }
+
+    .task-input::placeholder { color: rgba(255,255,255,0.5); }
+
+    .start-btn {
+        padding: 0.75rem 2rem;
+        background: linear-gradient(45deg, #00ff88, #00d4ff);
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .start-btn:hover:not(.disabled) { transform: translateY(-2px); }
+    .start-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .activity-log {
+        margin-top: 2rem;
+        background: rgba(0,0,0,0.3);
+        border-radius: 12px;
+        padding: 1rem;
+    }
+
+    .log-entries {
+        max-height: 400px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+    }
+
+    .log-entry {
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+        border-left: 3px solid;
+        background: rgba(0,0,0,0.2);
+        border-radius: 4px;
+    }
+
+    .log-entry.writer { border-color: #00ff88; }
+    .log-entry.reviewer { border-color: #ffd700; }
+    .log-entry.tester { border-color: #00d4ff; }
+    .log-entry.system { border-color: #999; }
+
+    .timestamp { color: #666; margin-right: 0.5rem; }
+    .agent-name { font-weight: bold; margin-right: 0.5rem; }
+
+    .result-section {
+        margin-top: 2rem;
+        padding: 1.5rem;
+        background: rgba(0,255,136,0.1);
+        border: 2px solid rgba(0,255,136,0.3);
+        border-radius: 12px;
+    }
+
+    .result-section pre {
+        background: rgba(0,0,0,0.5);
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+    }
+
+    .test-results {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: rgba(0,212,255,0.1);
+        border-radius: 8px;
+    }
+</style>
