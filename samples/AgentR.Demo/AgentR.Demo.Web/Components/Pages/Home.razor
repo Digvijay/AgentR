@@ -1,7 +1,126 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>AgentR | Enterprise Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="home-container">
+    <header class="hero">
+        <div class="logo-area">
+            <h1>AgentR</h1>
+            <span class="version-badge">v1.1.0</span>
+        </div>
+        <p class="tagline">The Enterprise "Nervous System" for Distributed AI Agents.</p>
+        <div class="hero-actions">
+            <a href="code-review-demo" class="primary-btn">🚀 Launch Demo</a>
+            <a href="https://github.com/Digvijay/AgentR" target="_blank" class="secondary-btn">View Source</a>
+        </div>
+    </header>
 
-Welcome to your new app.
+    <div class="features-grid">
+        <a href="code-review-demo" class="feature-card">
+            <span class="icon">👨‍💻</span>
+            <h3>Agent Workflow</h3>
+            <p>Watch a distributed Writer-Reviewer-Tester team turn a prompt into production code.</p>
+        </a>
+
+        <a href="discovery" class="feature-card">
+            <span class="icon">📡</span>
+            <h3>Global Discovery</h3>
+            <p>Real-time room scanning and agent presence detection across the Redis backplane.</p>
+        </a>
+
+        <a href="replay" class="feature-card">
+            <span class="icon">📼</span>
+            <h3>Flight Recorder</h3>
+            <p>Deterministic replay of any agent session for auditing, debugging, and compliance.</p>
+        </a>
+
+        <a href="mission-control" class="feature-card">
+            <span class="icon">🕹️</span>
+            <h3>Mission Control</h3>
+            <p>FinOps monitoring and Token Governance for managing large-scale agent fleets.</p>
+        </a>
+    </div>
+</div>
+
+<style>
+    .home-container {
+        padding: 4rem 2rem;
+        text-align: center;
+        color: #e6edf3;
+    }
+
+    .hero { margin-bottom: 5rem; }
+    
+    .logo-area { 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        gap: 15px; 
+        margin-bottom: 1rem;
+    }
+    
+    .logo-area h1 { 
+        font-size: 4rem; 
+        font-weight: 800; 
+        background: linear-gradient(135deg, #00d4ff, #00ff88);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+    }
+
+    .version-badge {
+        background: rgba(88, 166, 255, 0.1);
+        color: #58a6ff;
+        border: 1px solid rgba(88, 166, 255, 0.3);
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.9rem;
+    }
+
+    .tagline { font-size: 1.5rem; color: #8b949e; margin-bottom: 2.5rem; }
+
+    .hero-actions { display: flex; gap: 20px; justify-content: center; }
+
+    .primary-btn, .secondary-btn {
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        font-weight: bold;
+        text-decoration: none;
+        transition: transform 0.2s;
+    }
+
+    .primary-btn { background: #238636; color: white; }
+    .secondary-btn { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); }
+
+    .primary-btn:hover, .secondary-btn:hover { transform: translateY(-2px); opacity: 0.9; }
+
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 30px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .feature-card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 16px;
+        padding: 2rem;
+        text-decoration: none;
+        color: inherit;
+        transition: all 0.3s ease;
+        text-align: left;
+    }
+
+    .feature-card:hover {
+        transform: translateY(-5px);
+        border-color: #58a6ff;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .feature-card .icon { font-size: 3rem; display: block; margin-bottom: 1rem; }
+    .feature-card h3 { color: #f0f6fc; margin-bottom: 0.5rem; font-size: 1.4rem; }
+    .feature-card p { color: #8b949e; line-height: 1.5; font-size: 0.95rem; }
+</style>

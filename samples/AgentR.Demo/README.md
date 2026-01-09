@@ -12,7 +12,7 @@ A premium .NET Aspire sample application demonstrating the core features of Agen
 - Watch the agent's reasoning process played back with accurate timing.
 
 ### 🚀 Agent Lobby (KEDA Scale-to-Zero Demo)
-This is the showcase for AgentR v1.1's event-driven architecture.
+This is the showcase for AgentR's event-driven architecture.
 - Navigate to **Agent Lobby**.
 - Click **Summon DotNet Agent**.
 - **The Flow**:
@@ -56,7 +56,7 @@ The server enforces a "Toll Booth" model to prevent runaway costs:
 4. Open the **Aspire Dashboard** (URL in terminal) to see all services running.
 5. Navigate to the `agentr-demo-portal` to use the Session Replay tool.
 
-### 🎮 See it in Action (v1.1)
+### 🎮 See it in Action 
 To experience the **Lobby Pattern** and **Scale-to-Zero** logic:
 1. **Start the Aspire AppHost**.
 2. Go to the **"Agent Lobby"** in the sidebar of the Demo Portal.

@@ -26,6 +26,7 @@ class AgentRClient:
         self.on_turn_granted: Optional[AsyncCallback] = None 
         self.on_assignment: Optional[Callable[[str], Awaitable[None]]] = None
         self.on_discovery: Optional[Callable[[list[RoomInfo]], Awaitable[None]]] = None
+        self.on_floor_open: Optional[AsyncCallback] = None
         
         self.current_room: Optional[str] = None
         self._connected_event = asyncio.Event()
@@ -171,15 +172,19 @@ class AgentRClient:
         if sender == "HOST" and not content:
             if self.on_turn_granted:
                 try:
-                    # We do NOT run this in a thread anymore; asyncio handles it!
                     await self.on_turn_granted()
                 except Exception as e:
                     logging.error(f"❌ Error during turn execution: {e}")
                 finally:
-                    # Auto-Release Turn to prevent Zombie Agents
                     await self.release_turn(frame.get("RoomId"))
             return
         
-        # 5. Output for CLI
+        # 5. Floor Open (Reactive Turn Management)
+        if "$type" in frame and (frame["$type"] == "floor_open" or frame["$type"] == "FloorOpenFrame"):
+            if self.on_floor_open:
+                await self.on_floor_open()
+            return
+        
+        # 6. Output for CLI
         if content and sender != self.agent_id:
              print(f"[{sender}]: {content}")

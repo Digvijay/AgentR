@@ -1,6 +1,6 @@
 # AgentR FinOps: The Budget Controller 💸🛡️
 
-The **Budget Controller** is a core governance layer in AgentR v1.1 designed to prevent "Runaway LLM Costs." It acts as a real-time toll booth, ensuring that agents only operate within their allocated financial boundaries.
+The **Budget Controller** is a core governance layer in AgentR designed to prevent "Runaway LLM Costs." It acts as a real-time toll booth, ensuring that agents only operate within their allocated financial boundaries.
 
 ## 1. The Problem: "The $15k Intern Loop"
 In distributed AI systems, a simple `while(true)` loop or an agent hallucination can result in thousands of high-cost GPT-4 API calls in minutes. Without network-level enforcement, you only notice the damage when the monthly bill arrives.
@@ -8,7 +8,7 @@ In distributed AI systems, a simple `while(true)` loop or an agent hallucination
 ## 2. The Solution: Network-Level Quotas
 AgentR intercepts all agent communications at the **Hub** level and enforces a pre-paid credit model.
 
-### 💰 Pricing Model (v1.1)
+### 💰 Pricing Model
 | Action | Cost (Credits) | Rationale |
 | :--- | :--- | :--- |
 | **RequestTurn** | 50 | Discourages "micro-turns" and turns-taking spam. |
@@ -28,6 +28,15 @@ The Budget Controller is implemented as an atomic SignalR `IHubFilter` backed by
     - **Sufficient Funds**: The Hub processes the call and executes an atomic `DECRBY` in Redis.
     - **Insufficient Funds**: The Hub throws a `402 Payment Required` HubException. This instantly triggers the Client SDK's error handling, halting the agent's logic.
 5. **Top-up**: Administrators can refill a room's wallet via the REST API.
+
+### 🛡️ Preventing Budget Drain: Reactive Turns 
+To maximize budget efficiency, AgentR introduced **Reactive Turn Management**. 
+
+**The Polling Problem (Avoided):**
+In a standard turn-based system, busy agents might "poll" the server (`RequestTurn` -> `BUSY` -> `Loop`). With a cost of **50 credits per request**, an idle agent could accidentally drain a room's budget in seconds just by waiting.
+
+**The Solution:**
+Agents now wait for a `FloorOpenFrame` signal from the Hub. They only invoke `RequestTurn` when precisely notified that the lock is free, ensuring that every 50-credit expenditure has a high probability of success.
 
 ## 4. Configuration & API
 

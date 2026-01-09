@@ -1,6 +1,10 @@
 using AgentR.Client;
 using AgentR.Demo.Workers;
 using Microsoft.SemanticKernel;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -25,9 +29,26 @@ kernelBuilder.AddOpenAIChatCompletion(
 
 builder.Services.AddSingleton(kernelBuilder.Build());
 
-// AgentR Client Factory - Each worker needs its own client instance
 builder.Services.AddSingleton<Func<string, AgentClient>>(sp => 
-    (agentId) => new AgentClient(hubUrl, agentId, "demo-worker-token"));
+    (agentId) => 
+    {
+        // Generate JWT token
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.UTF8.GetBytes("ThisIsMySuperSecretKeyForAgentR_MustBe32CharsLong!"); 
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(new[] { 
+                new Claim(ClaimTypes.NameIdentifier, agentId), // Unique per worker
+                new Claim("sub", agentId)
+            }),
+            Expires = DateTime.UtcNow.AddHours(1),
+            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+        };
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        var jwtToken = tokenHandler.WriteToken(token);
+
+        return new AgentClient(hubUrl, agentId, jwtToken);
+    });
 
 // Register all three workers
 builder.Services.AddHostedService<CodeWriterWorker>();

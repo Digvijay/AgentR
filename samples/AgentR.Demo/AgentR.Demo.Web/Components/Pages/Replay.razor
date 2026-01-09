@@ -12,7 +12,15 @@
 
     <div class="search-box">
         <input @bind="roomId" placeholder="Enter Room ID (e.g., test-room)" @onkeyup="HandleKeyUp" />
-        <button @onclick="LoadReplay" disabled="@isLoggingIn">Fetch Logs</button>
+        <button @onclick="LoadReplay" disabled="@isLoggingIn">Fetch from Hub</button>
+    </div>
+
+    <div class="paste-section">
+        <textarea @bind="pastedJson" placeholder="OR Paste raw JSON from Code Review Demo..."></textarea>
+        <div class="button-group">
+            <button @onclick="LoadPasted">🎞️ Load Manual Log</button>
+            <button class="secondary" @onclick="LoadSample">🍿 Load Sample Data</button>
+        </div>
     </div>
 
     @if (records != null)
@@ -43,12 +51,44 @@
 </div>
 
 @code {
-    private string roomId = "test-room";
+    private string roomId = "code-review-demo-room";
+    private string pastedJson = "";
     private List<AuditRecord>? records;
     private List<AuditRecord> displayedRecords = new();
     private int currentIndex = 0;
     private bool isPlaying = false;
     private bool isLoggingIn = false;
+
+    private async Task LoadPasted()
+    {
+        if (string.IsNullOrWhiteSpace(pastedJson)) return;
+        try
+        {
+            records = System.Text.Json.JsonSerializer.Deserialize<List<AuditRecord>>(pastedJson);
+            displayedRecords.Clear();
+            currentIndex = 0;
+            isPlaying = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Invalid JSON: {ex.Message}");
+        }
+    }
+
+    private async Task LoadSample()
+    {
+        pastedJson = @"
+[
+  { ""AgentId"": ""writer"", ""Content"": ""Designing solution for user task..."", ""EventType"": ""Thinking"", ""Timestamp"": ""2023-11-14T22:13:21.000+00:00"" },
+  { ""AgentId"": ""writer"", ""Content"": ""REVIEW_REQUEST: ```csharp\npublic int Add(int a, int b) => a + b;\n```"", ""EventType"": ""MessageFrame"", ""Timestamp"": ""2023-11-14T22:13:22.000+00:00"" },
+  { ""AgentId"": ""reviewer"", ""Content"": ""Checking for syntax errors and style guide compliance..."", ""EventType"": ""Thinking"", ""Timestamp"": ""2023-11-14T22:13:24.000+00:00"" },
+  { ""AgentId"": ""reviewer"", ""Content"": ""TEST_REQUEST: Code looks good. Prepare unit tests."", ""EventType"": ""MessageFrame"", ""Timestamp"": ""2023-11-14T22:13:26.000+00:00"" },
+  { ""AgentId"": ""tester"", ""Content"": ""Compiling and running NUnit test suite..."", ""EventType"": ""Thinking"", ""Timestamp"": ""2023-11-14T22:13:28.000+00:00"" },
+  { ""AgentId"": ""tester"", ""Content"": ""Test Results:\n✅ Passes (3/3)\n🏁 WORKFLOW_COMPLETE"", ""EventType"": ""MessageFrame"", ""Timestamp"": ""2023-11-14T22:13:30.000+00:00"" }
+]";
+        await LoadPasted();
+    }
 
     private void HandleKeyUp(KeyboardEventArgs e)
     {
@@ -122,6 +162,33 @@
     .search-box input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
     .search-box button { padding: 10px 20px; border-radius: 8px; background: #6366f1; color: white; border: none; cursor: pointer; }
     
+    .paste-section { margin-bottom: 2rem; display: flex; flex-direction: column; gap: 10px; }
+    .paste-section textarea { 
+        background: #0f172a; 
+        color: #94a3b8; 
+        border: 1px solid #1e293b; 
+        border-radius: 8px; 
+        padding: 0.8rem; 
+        font-family: monospace; 
+        font-size: 0.8rem;
+        height: 60px;
+        resize: vertical;
+    }
+    .button-group { display: flex; gap: 10px; }
+    .paste-section button { 
+        padding: 8px 16px; 
+        background: #1e293b; 
+        color: #94a3b8; 
+        border: 1px solid #334155; 
+        border-radius: 6px; 
+        cursor: pointer; 
+        font-weight: bold;
+        flex: 1;
+    }
+    .paste-section button:hover { background: #334155; color: white; }
+    .paste-section button.secondary { background: #0d1117; border-color: #30363d; color: #58a6ff; }
+    .paste-section button.secondary:hover { background: #1f2937; }
+
     .replay-controls { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
     .replay-controls button { padding: 8px 16px; border-radius: 6px; border: 1px solid #ddd; background: #f9fafb; cursor: pointer; }
     .status { font-size: 0.9rem; color: #666; }

@@ -111,4 +111,24 @@ public class AuditTests : IDisposable
         Assert.Single(room2Logs);
         Assert.Equal("C3", room2Logs[0].Content);
     }
+    [Fact]
+    public async Task LocalAuditStorage_ShouldFilterByRoom()
+    {
+        // Arrange
+        var storage = new LocalAuditStorage(TestLogDir);
+        await storage.AppendRecordsAsync("mixed.jsonl", new[] {
+            new AuditRecord { RoomId = "A", AgentId = "Test", Content = "1" },
+            new AuditRecord { RoomId = "B", AgentId = "Test", Content = "2" }
+        }, default);
+
+        // Act
+        var logsA = await storage.GetRecordsAsync("A", default);
+        var logsB = await storage.GetRecordsAsync("B", default);
+
+        // Assert
+        Assert.Single(logsA);
+        Assert.Single(logsB);
+        Assert.Equal("1", logsA[0].Content);
+        Assert.Equal("2", logsB[0].Content);
+    }
 }

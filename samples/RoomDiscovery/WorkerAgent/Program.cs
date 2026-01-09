@@ -38,7 +38,7 @@ client.OnTurnGranted += async (stopEvent) =>
     await client.ReleaseTurnAsync("Task-PR-123");
 };
 
-// Handle dynamic assignments (v1.1 feature)
+// Handle dynamic assignments
 client.OnAssignment += async (room) =>
 {
     Console.WriteLine($"📍 Received assignment to move to: {room}");

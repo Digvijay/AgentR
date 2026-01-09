@@ -10,7 +10,7 @@ AgentR uses a high-performance Redis-backed "Lobby" to orchestrate just-in-time 
 
 This implementation effectively transforms AgentR from an "Always-On Service" into a **Serverless FaaS (Function as a Service)** architecture, but with a critical advantage: it removes the traditional constraints of serverless platforms (like AWS Lambda).
 
-| Feature | Legacy AgentR | AgentR v1.1 (KEDA) | Traditional FaaS |
+| Feature | Legacy AgentR | AgentR (KEDA) | Traditional FaaS |
 | :--- | :--- | :--- | :--- |
 | **Idle State** | Always running | **Scale-to-Zero** | Scale-to-Zero |
 | **Boutique Power** | Full Containers | **Full Containers** | Restricted CPU/RAM |

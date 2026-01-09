@@ -2,6 +2,9 @@
 @using AgentR.Client
 @using AgentR.Shared
 @inject AgentClient Agent
+@inject IJSRuntime JS
+@inject ConfigService Config
+@inject DemoState State
 @rendermode InteractiveServer
 
 <PageTitle>AgentR | Code Review Demo</PageTitle>
@@ -12,19 +15,19 @@
         <p class="subtitle">Watch three AI agents collaborate: <b>Writer → Reviewer → Tester</b></p>
 
         <div class="workflow-diagram">
-            <div class="agent-box @(currentAgent == "writer" ? "active" : "")">
+            <div class="agent-box @(State.CurrentAgent == "writer" ? "active" : "")">
                 <span class="icon">✍️</span>
                 <div>Code Writer</div>
                 <small>Writes code</small>
             </div>
             <div class="arrow">→</div>
-            <div class="agent-box @(currentAgent == "reviewer" ? "active" : "")">
+            <div class="agent-box @(State.CurrentAgent == "reviewer" ? "active" : "")">
                 <span class="icon">🔍</span>
                 <div>Code Reviewer</div>
                 <small>Reviews quality</small>
             </div>
             <div class="arrow">→</div>
-            <div class="agent-box @(currentAgent == "tester" ? "active" : "")">
+            <div class="agent-box @(State.CurrentAgent == "tester" ? "active" : "")">
                 <span class="icon">🧪</span>
                 <div>Code Tester</div>
                 <small>Runs tests</small>
@@ -33,36 +36,46 @@
 
         <div class="input-section">
             <label>Enter a coding task:</label>
-            <input type="text" @bind="taskDescription" placeholder="e.g., Write a function to calculate fibonacci numbers" class="task-input" />
-            <button class="start-btn @(isRunning ? "disabled" : "")" @onclick="StartWorkflow" disabled="@isRunning">
-                @(isRunning ? "⚙️ Running..." : "🚀 Start Workflow")
+            <input type="text" @bind="State.TaskDescription" placeholder="e.g., Write a function to calculate fibonacci numbers" class="task-input" />
+            <button class="start-btn @(State.IsWorkflowRunning ? "disabled" : "")" @onclick="StartWorkflow" disabled="@State.IsWorkflowRunning">
+                @(State.IsWorkflowRunning ? "⚙️ Running..." : "🚀 Start Workflow")
             </button>
         </div>
 
         <div class="activity-log">
-            <h3>📋 Activity Log</h3>
+            <div class="log-header">
+                <h3>📋 Activity Log</h3>
+                @if (State.ActivityLog.Any())
+                {
+                    <button class="copy-btn" @onclick="CopyForReplayer">💾 Copy for Replayer</button>
+                }
+            </div>
             <div class="log-entries">
-                @foreach (var entry in activityLog)
+                @foreach (var entry in State.ActivityLog)
                 {
                     <div class="log-entry @entry.Type">
                         <span class="timestamp">@entry.Timestamp.ToString("HH:mm:ss")</span>
                         <span class="agent-name">[@entry.Agent]</span>
+                        @if (entry.IsSimulated)
+                        {
+                            <span class="sim-badge">(SIMULATED)</span>
+                        }
                         <span class="message">@entry.Message</span>
                     </div>
                 }
             </div>
         </div>
 
-        @if (!string.IsNullOrEmpty(finalCode))
+        @if (!string.IsNullOrEmpty(State.FinalCode))
         {
             <div class="result-section">
                 <h3>✅ Final Result</h3>
-                <pre><code>@finalCode</code></pre>
-                @if (!string.IsNullOrEmpty(testResults))
+                <pre><code>@State.FinalCode</code></pre>
+                @if (!string.IsNullOrEmpty(State.TestResults))
                 {
                     <div class="test-results">
                         <h4>Test Results:</h4>
-                        <pre>@testResults</pre>
+                        <pre>@State.TestResults</pre>
                     </div>
                 }
             </div>
@@ -71,241 +84,385 @@
 </div>
 
 @code {
-    private string taskDescription = "Write a function to calculate fibonacci numbers";
-    private bool isRunning = false;
-    private string currentAgent = "";
-    private List<ActivityEntry> activityLog = new();
-    private string finalCode = "";
-    private string testResults = "";
     private string roomId = "code-review-demo-room";
 
     protected override async Task OnInitializedAsync()
     {
-        Agent.OnSignalReceived += frame =>
+        State.OnChange += StateHasChanged; // Re-render when state changes
+
+        Agent.OnTurnGranted += async ct =>
         {
-            if (frame is MessageFrame msg)
+            if (State.IsWorkflowRunning && State.CurrentAgent == "writer" && !string.IsNullOrEmpty(State.TaskDescription))
             {
-                AddLog(msg.SenderId, msg.Content);
-                
-                // Update current agent based on who's speaking
-                if (msg.SenderId.Contains("writer")) currentAgent = "writer";
-                else if (msg.SenderId.Contains("reviewer")) currentAgent = "reviewer";
-                else if (msg.SenderId.Contains("tester")) currentAgent = "tester";
-                
-                // Extract code if present
-                if (msg.Content.Contains("```"))
+                AddLog("System", "Turn granted. Emitting task...");
+                await Agent.EmitMessageAsync(roomId, $"TASK: {State.TaskDescription}");
+            }
+        };
+
+        Agent.OnSignalReceived += async frame =>
+        {
+            await InvokeAsync(async () =>
+            {
+                if (frame is MessageFrame msg)
                 {
-                    var codeStart = msg.Content.IndexOf("```") + 3;
-                    var codeEnd = msg.Content.LastIndexOf("```");
-                    if (codeEnd > codeStart)
+                    bool isSim = !Config.HasRealConfig || msg.Content.Contains("Simulated");
+                    AddLog(msg.SenderId, msg.Content, isSim);
+                    
+                    if (msg.Content.Contains("BUSY:"))
                     {
-                        finalCode = msg.Content.Substring(codeStart, codeEnd - codeStart).Trim();
+                        AddLog("System", "⚠️ Room is busy. Waiting for floor to open...");
+                        return;
+                    }
+                    
+                    // Update current agent based on who's speaking
+                    if (msg.SenderId.Contains("writer")) State.CurrentAgent = "writer";
+                    else if (msg.SenderId.Contains("reviewer")) State.CurrentAgent = "reviewer";
+                    else if (msg.SenderId.Contains("tester")) State.CurrentAgent = "tester";
+                    
+                    // Extract code if present in standard markdown blocks
+                    if (msg.Content.Contains("```"))
+                    {
+                        var codeStart = msg.Content.IndexOf("```") + 3;
+                        // Skip the 'csharp' or language tag if present
+                        if (msg.Content.Substring(codeStart).TrimStart().StartsWith("csharp"))
+                            codeStart = msg.Content.IndexOf("\n", codeStart) + 1;
+
+                        var codeEnd = msg.Content.LastIndexOf("```");
+                        if (codeEnd > codeStart)
+                        {
+                            State.FinalCode = msg.Content.Substring(codeStart, codeEnd - codeStart).Trim();
+                        }
+                    }
+                    
+                    // Detect workflow stage transitions
+                    if (msg.Content.Contains("REVIEW_REQUEST"))
+                    {
+                        State.IsWorkflowRunning = true;
+                        State.CurrentAgent = "reviewer";
+                        // If it's the protocol message, strip the prefix for display
+                        if (msg.Content.StartsWith("REVIEW_REQUEST:"))
+                            State.FinalCode = msg.Content.Substring("REVIEW_REQUEST:".Length).Trim();
+                    }
+                    else if (msg.Content.Contains("TEST_REQUEST"))
+                    {
+                        State.IsWorkflowRunning = true;
+                        State.CurrentAgent = "tester";
+                        if (msg.Content.StartsWith("TEST_REQUEST:"))
+                            State.FinalCode = msg.Content.Substring("TEST_REQUEST:".Length).Trim();
+                    }
+                    else if (msg.Content.Contains("WORKFLOW_COMPLETE"))
+                    {
+                        State.IsWorkflowRunning = false;
+                        State.CurrentAgent = "";
+                        AddLog("System", "🏁 Workflow completed successfully!");
+                    }
+                    else if (msg.Content.Contains("Test Results:"))
+                    {
+                        State.TestResults = msg.Content.Substring(msg.Content.IndexOf("Test Results:")).Trim();
+                    }
+                    
+                    State.NotifyStateChanged();
+                }
+                else if (frame is FloorOpenFrame)
+                {
+                    if (State.IsWorkflowRunning && State.CurrentAgent == "writer" && !string.IsNullOrEmpty(State.TaskDescription))
+                    {
+                        AddLog("System", "Floor is open! Retrying turn request...");
+                        try 
+                        {
+                            await Agent.RequestTurnAsync(roomId);
+                        }
+                        catch (Exception ex)
+                        {
+                            AddLog("System", $"⚠️ Turn request failed: {ex.Message}");
+                        }
                     }
                 }
-                
-                // Check if workflow is complete
-                if (msg.Content.Contains("REVIEW_REQUEST"))
-                {
-                    isRunning = true;
-                    currentAgent = "reviewer";
-                    finalCode = msg.Content;
-                }
-                // Check if workflow is complete
-                if (msg.Content.Contains("TEST_REQUEST"))
-                {
-                    isRunning = true;
-                    currentAgent = "tester";
-                    finalCode = msg.Content;
-                }
-                // Check if workflow is complete
-                if (msg.Content.Contains("WORKFLOW_COMPLETE"))
-                {
-                    isRunning = false;
-                    currentAgent = "";
-                    testResults = msg.Content;
-                }
-                
-                StateHasChanged();
-            }
+            });
         };
 
         await Agent.ConnectAsync();
         await Agent.JoinRoomAsync(roomId);
-        AddLog("System", "Connected to AgentR Hub. Ready to start workflow.");
+        
+        // Only log connection if log is empty (avoid spam on re-nav)
+        if (!State.ActivityLog.Any())
+            AddLog("System", "Connected to AgentR Hub. Ready to start workflow.");
+    }
+
+    private async Task CopyForReplayer()
+    {
+        var records = State.ActivityLog.Select(l => new AgentR.Shared.AuditRecord
+        {
+            AgentId = l.Agent,
+            RoomId = roomId,
+            Content = l.Message,
+            EventType = l.Type == "system" ? "Log" : "MessageFrame",
+            Timestamp = new DateTimeOffset(l.Timestamp)
+        }).OrderBy(r => r.Timestamp).ToList();
+
+        var json = System.Text.Json.JsonSerializer.Serialize(records);
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", json);
+        AddLog("System", "✅ Session copied to clipboard in Flight Recorder format!");
     }
 
     private async Task StartWorkflow()
     {
-        isRunning = true;
-        currentAgent = "writer";
-        finalCode = "";
-        testResults = "";
-        activityLog.Clear();
+        State.IsWorkflowRunning = true;
+        State.CurrentAgent = "writer";
+        State.FinalCode = "";
+        State.TestResults = "";
+        State.ActivityLog.Clear();
         
-        AddLog("System", $"Starting workflow: {taskDescription}");
-        
-        // Send task to the room - CodeWriter agent will pick it up
-        await Agent.EmitMessageAsync(roomId, $"TASK: {taskDescription}");
-        
-        StateHasChanged();
-    }
+        AddLog("System", $"Starting workflow: {State.TaskDescription}");
 
-    private void AddLog(string agent, string message)
-    {
-        activityLog.Insert(0, new ActivityEntry(DateTime.Now, agent, message));
-        if (activityLog.Count > 50) activityLog.RemoveAt(50);
-        StateHasChanged();
-    }
-
-    record ActivityEntry(DateTime Timestamp, string Agent, string Message)
-    {
-        public string Type => Agent switch
+        if (!Config.HasRealConfig)
         {
-            var a when a.Contains("writer") => "writer",
-            var a when a.Contains("reviewer") => "reviewer",
-            var a when a.Contains("tester") => "tester",
-            _ => "system"
-        };
+            _ = RunSimulation();
+        }
+        else
+        {
+            // Use different credentials for the agents in real mode? 
+            // For now, let's just trigger the simulation if no real agents are active.
+            // In a real world, the user would have real workers running.
+            _ = RunSimulation(); 
+        }
+        
+        State.NotifyStateChanged();
+    }
+
+    private async Task RunSimulation()
+    {
+        try {
+            // 1. Writer
+            await Agent.RequestTurnAsync(roomId);
+            await Task.Delay(1000);
+            await Agent.EmitThinkingAsync(roomId, "Designing solution for " + State.TaskDescription);
+            await Task.Delay(1500);
+            var code = "public class Solution {\n  public int Result() => 42; // Simulated logic\n}";
+            await Agent.EmitMessageAsync(roomId, "REVIEW_REQUEST: ```csharp\n" + code + "\n```");
+            
+            // 2. Reviewer
+            await Task.Delay(2000);
+            await Agent.RequestTurnAsync(roomId);
+            await Agent.EmitThinkingAsync(roomId, "Analyzing complexity and clean code principles...");
+            await Task.Delay(2000);
+            await Agent.EmitMessageAsync(roomId, "TEST_REQUEST: Code looks optimal. Requesting unit tests.");
+
+            // 3. Tester
+            await Task.Delay(2000);
+            await Agent.RequestTurnAsync(roomId);
+            await Agent.EmitThinkingAsync(roomId, "Compiling and running NUnit test suite...");
+            await Task.Delay(2000);
+            await Agent.EmitMessageAsync(roomId, "Test Results:\n✅ All Tests Passed (Simulated)\n🏁 WORKFLOW_COMPLETE");
+        }
+        catch (Exception ex)
+        {
+             await InvokeAsync(() => {
+                var isBudgetError = ex.Message.Contains("402");
+                var budgetLink = isBudgetError ? $" <a href='/mission-control?roomId={roomId}' style='color:#f85149;text-decoration:underline;'>Fix Budget ➔</a>" : "";
+                
+                AddLog("System", $"⚠️ Simulation paused: {ex.Message}{budgetLink}");
+                
+                State.IsWorkflowRunning = false;
+                StateHasChanged();
+             });
+        }
+    }
+
+    private async void AddLog(string agent, string message, bool isSimulated = false)
+    {
+        State.ActivityLog.Insert(0, new ActivityEntry(DateTime.Now, agent, message, isSimulated));
+        if (State.ActivityLog.Count > 50) State.ActivityLog.RemoveAt(50);
+        await InvokeAsync(StateHasChanged);
     }
 }
 
 <style>
     .demo-container {
         padding: 2rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        /* Removing the noisy gradient for a cleaner, enterprise look */
+        /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
         min-height: 90vh;
     }
 
     .glass-card {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 20px;
-        padding: 2rem;
-        color: white;
-        max-width: 1200px;
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 2.5rem;
+        color: #e6edf3;
+        max-width: 1000px;
         margin: 0 auto;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     }
 
-    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .subtitle { color: rgba(255,255,255,0.8); margin-bottom: 2rem; }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; color: #58a6ff; }
+    .subtitle { color: #8b949e; margin-bottom: 3rem; font-size: 1.1rem; }
 
     .workflow-diagram {
         display: flex;
         justify-content: center;
         align-items: center;
-        gap: 1rem;
-        margin: 2rem 0;
+        gap: 2rem;
+        margin: 3rem 0;
         padding: 2rem;
-        background: rgba(0,0,0,0.2);
+        background: #0d1117;
+        border: 1px solid #21262d;
         border-radius: 12px;
     }
 
     .agent-box {
         padding: 1.5rem;
-        background: rgba(255,255,255,0.1);
-        border: 2px solid rgba(255,255,255,0.3);
+        background: #161b22;
+        border: 1px solid #30363d;
         border-radius: 12px;
         text-align: center;
-        min-width: 150px;
+        min-width: 160px;
         transition: all 0.3s ease;
     }
 
     .agent-box.active {
-        background: rgba(255,255,255,0.3);
-        border-color: #00ff88;
-        box-shadow: 0 0 20px rgba(0,255,136,0.5);
-        transform: scale(1.1);
+        background: #1f2937;
+        border-color: #238636;
+        box-shadow: 0 0 15px rgba(35, 134, 54, 0.4);
+        transform: translateY(-5px);
     }
 
-    .agent-box .icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
-    .agent-box small { color: rgba(255,255,255,0.7); }
-    .arrow { font-size: 2rem; color: rgba(255,255,255,0.5); }
+    .agent-box .icon { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
+    .agent-box div { font-weight: 600; margin-bottom: 0.2rem; }
+    .agent-box small { color: #8b949e; font-size: 0.85rem; }
+    .arrow { font-size: 1.5rem; color: #8b949e; }
 
     .input-section {
-        margin: 2rem 0;
+        margin: 3rem 0;
         display: flex;
         gap: 1rem;
         flex-wrap: wrap;
+        align-items: flex-end;
     }
 
-    .input-section label { width: 100%; font-weight: bold; }
+    .input-section label { width: 100%; font-weight: 600; color: #e6edf3; margin-bottom: 0.5rem; display: block; }
     
     .task-input {
         flex: 1;
-        padding: 0.75rem;
-        border: 2px solid rgba(255,255,255,0.3);
-        border-radius: 8px;
-        background: rgba(255,255,255,0.1);
+        padding: 0.8rem 1rem;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        background: #0d1117;
+        color: #e6edf3;
+        font-size: 1rem;
+        transition: border-color 0.2s;
+    }
+    .task-input:focus { outline: none; border-color: #58a6ff; }
+
+    .start-btn {
+        padding: 0.8rem 2rem;
+        background: #238636;
+        border: none;
+        border-radius: 6px;
         color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
         font-size: 1rem;
     }
 
-    .task-input::placeholder { color: rgba(255,255,255,0.5); }
-
-    .start-btn {
-        padding: 0.75rem 2rem;
-        background: linear-gradient(45deg, #00ff88, #00d4ff);
-        border: none;
-        border-radius: 8px;
-        color: white;
-        font-weight: bold;
-        cursor: pointer;
-        transition: transform 0.2s;
-    }
-
-    .start-btn:hover:not(.disabled) { transform: translateY(-2px); }
-    .start-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+    .start-btn:hover:not(.disabled) { background: #2ea043; transform: translateY(-1px); }
+    .start-btn.disabled { background: #21262d; color: #8b949e; cursor: not-allowed; border: 1px solid #30363d; }
 
     .activity-log {
-        margin-top: 2rem;
-        background: rgba(0,0,0,0.3);
+        margin-top: 3rem;
+        background: #0d1117;
+        border: 1px solid #30363d;
         border-radius: 12px;
-        padding: 1rem;
+        padding: 0;
+        overflow: hidden;
     }
+
+    .log-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        background: #161b22;
+        border-bottom: 1px solid #30363d;
+    }
+    .log-header h3 { margin: 0; font-size: 1.1rem; }
+
+    .copy-btn {
+        background: #21262d;
+        border: 1px solid #30363d;
+        color: #c9d1d9;
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .copy-btn:hover { background: #30363d; color: #58a6ff; }
 
     .log-entries {
         max-height: 400px;
         overflow-y: auto;
-        font-family: 'Courier New', monospace;
+        padding: 1rem;
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
         font-size: 0.9rem;
     }
 
     .log-entry {
-        padding: 0.5rem;
+        padding: 0.8rem;
         margin-bottom: 0.5rem;
-        border-left: 3px solid;
-        background: rgba(0,0,0,0.2);
-        border-radius: 4px;
+        border-left: 3px solid #30363d;
+        background: #161b22;
+        border-radius: 0 4px 4px 0;
+        display: flex;
+        align-items: baseline;
     }
 
     .log-entry.writer { border-color: #00ff88; }
-    .log-entry.reviewer { border-color: #ffd700; }
+    .log-entry.reviewer { border-color: #e3b341; }
     .log-entry.tester { border-color: #00d4ff; }
-    .log-entry.system { border-color: #999; }
+    .log-entry.system { border-color: #8b949e; opacity: 0.8; }
 
-    .timestamp { color: #666; margin-right: 0.5rem; }
-    .agent-name { font-weight: bold; margin-right: 0.5rem; }
+    .sim-badge {
+        font-size: 0.7rem;
+        background: #1f6feb;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-right: 0.8rem;
+        font-weight: 600;
+    }
+
+    .timestamp { color: #8b949e; margin-right: 1rem; font-size: 0.8rem; min-width: 70px; }
+    .agent-name { font-weight: bold; margin-right: 1rem; color: #e6edf3; min-width: 90px; }
+    .message { color: #d0d7de; }
 
     .result-section {
-        margin-top: 2rem;
-        padding: 1.5rem;
-        background: rgba(0,255,136,0.1);
-        border: 2px solid rgba(0,255,136,0.3);
+        margin-top: 3rem;
+        padding: 2rem;
+        background: rgba(35, 134, 54, 0.1);
+        border: 1px solid rgba(35, 134, 54, 0.4);
         border-radius: 12px;
     }
 
+    .result-section h3 { color: #3fb950; margin-bottom: 1rem; font-size: 1.2rem; }
+
     .result-section pre {
-        background: rgba(0,0,0,0.5);
-        padding: 1rem;
+        background: #0d1117;
+        padding: 1.5rem;
         border-radius: 8px;
         overflow-x: auto;
+        border: 1px solid #30363d;
+        color: #e6edf3;
+        font-family: 'JetBrains Mono', monospace;
     }
 
     .test-results {
-        margin-top: 1rem;
-        padding: 1rem;
-        background: rgba(0,212,255,0.1);
-        border-radius: 8px;
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px dashed rgba(35, 134, 54, 0.4);
     }
+    .test-results h4 { color: #e6edf3; margin-bottom: 1rem; }
+    .test-results pre { border-color: rgba(35, 134, 54, 0.4); }
 </style>

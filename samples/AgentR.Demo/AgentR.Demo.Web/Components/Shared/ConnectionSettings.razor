@@ -1,0 +1,116 @@
+@using AgentR.Demo.Web
+@inject ConfigService Config
+
+<div class="settings-bar @(isOpen ? "open" : "")">
+    <div class="settings-toggle" @onclick="Toggle">
+        @if (Config.HasRealConfig)
+        {
+            <span class="status-icon success"></span>
+            <span>LLM: @Config.LlmModel</span>
+        }
+        else
+        {
+            <span class="status-icon warning"></span>
+            <span>Simulation Mode (No Keys)</span>
+        }
+    </div>
+
+    @if (isOpen)
+    {
+        <div class="settings-content">
+            <h3>LLM Connectivity Settings</h3>
+            <p>Provide your own credentials to use real agents, or leave blank for simulations.</p>
+            
+            <div class="form-group">
+                <label>Endpoint URL</label>
+                <input type="text" @bind="Config.LlmEndpoint" placeholder="https://api.openai.com/v1" />
+            </div>
+
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" @bind="Config.LlmKey" placeholder="sk-..." />
+            </div>
+
+            <div class="form-group">
+                <label>Model Name</label>
+                <input type="text" @bind="Config.LlmModel" />
+            </div>
+
+            <button class="save-btn" @onclick="Save">Apply Settings</button>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isOpen = false;
+
+    private void Toggle() => isOpen = !isOpen;
+
+    private void Save()
+    {
+        Config.NotifyChanged();
+        isOpen = false;
+    }
+}
+
+<style>
+    .settings-bar {
+        position: fixed;
+        top: 0;
+        left: 250px; /* Sidebar width */
+        right: 0;
+        z-index: 1000;
+        background: rgba(13, 17, 23, 0.9);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid #30363d;
+        color: white;
+        transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+    }
+
+    .settings-toggle {
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+
+    .status-icon { width: 10px; height: 10px; border-radius: 50%; }
+    .status-icon.success { background: #238636; box-shadow: 0 0 5px #238636; }
+    .status-icon.warning { background: #d29922; box-shadow: 0 0 5px #d29922; }
+
+    .settings-content {
+        padding: 1.5rem;
+        border-top: 1px solid #30363d;
+        background: #0d1117;
+    }
+
+    .settings-content h3 { margin: 0 0 0.5rem 0; font-size: 1rem; color: #58a6ff; }
+    .settings-content p { color: #8b949e; font-size: 0.8rem; margin-bottom: 1.5rem; }
+
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-size: 0.75rem; color: #8b949e; margin-bottom: 0.3rem; }
+    .form-group input { 
+        width: 100%; 
+        background: #161b22; 
+        border: 1px solid #30363d; 
+        border-radius: 6px; 
+        padding: 0.5rem; 
+        color: white; 
+        font-size: 0.9rem;
+    }
+
+    .save-btn {
+        width: 100%;
+        background: #238636;
+        color: white;
+        border: none;
+        padding: 0.7rem;
+        border-radius: 6px;
+        font-weight: bold;
+        margin-top: 1rem;
+        cursor: pointer;
+    }
+</style>

@@ -23,15 +23,58 @@ public class CodeTesterWorker : BackgroundService
         _logger = logger;
     }
 
+    private string? _pendingCode;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("CodeTester agent {AgentId} starting...", _agentId);
 
+        _client.OnTurnGranted += async ct =>
+        {
+            if (!string.IsNullOrEmpty(_pendingCode))
+            {
+                var code = _pendingCode;
+                _pendingCode = null;
+                await HandleTestInternalAsync(code, ct);
+            }
+        };
+
         _client.OnSignalReceived += async frame =>
         {
-            if (frame is MessageFrame msg && msg.Content.StartsWith("TEST_REQUEST:"))
+            if (frame is MessageFrame msg)
             {
-                await HandleTestAsync(msg.Content.Replace("TEST_REQUEST:", "").Trim());
+                if (msg.Content.StartsWith("TEST_REQUEST:"))
+                {
+                    _pendingCode = msg.Content.Replace("TEST_REQUEST:", "").Trim();
+                    _logger.LogInformation("CodeTester queued testing, requesting turn...");
+                    try
+                    {
+                        await _client.RequestTurnAsync(_roomId, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to request turn: {Message}", ex.Message);
+                    }
+                }
+                else if (msg.SenderId == "HOST" && msg.Content.Contains("BUSY:"))
+                {
+                    _logger.LogWarning("Room busy. Waiting for floor to open...");
+                }
+            }
+            else if (frame is FloorOpenFrame)
+            {
+                if (!string.IsNullOrEmpty(_pendingCode))
+                {
+                    _logger.LogInformation("Floor is open. Requesting turn for pending testing...");
+                    try 
+                    {
+                        await _client.RequestTurnAsync(_roomId, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to request turn: {Message}", ex.Message);
+                    }
+                }
             }
         };
 
@@ -43,13 +86,16 @@ public class CodeTesterWorker : BackgroundService
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
-    private async Task HandleTestAsync(string code)
+    private async Task HandleTestInternalAsync(string code, CancellationToken ct)
     {
         try
         {
             _logger.LogInformation("CodeTester running tests...");
             
-            await _client.EmitMessageAsync(_roomId, "[CodeTester] Running unit tests...");
+            await _client.EmitMessageAsync(_roomId, "[CodeTester] Running unit tests...", ct);
+
+            // Simulate testing delay
+            await Task.Delay(3000, ct);
 
             string testReport;
             try
@@ -111,15 +157,15 @@ Format as a test report.";
 **Verdict:** All tests PASSED ✅";
             }
 
-            await _client.EmitMessageAsync(_roomId, $"[CodeTester] Test Results:\n{testReport}");
-            await _client.EmitMessageAsync(_roomId, "[CodeTester] WORKFLOW_COMPLETE - All agents finished!");
+            await _client.EmitMessageAsync(_roomId, $"[CodeTester] Test Results:\n{testReport}", ct);
+            await _client.EmitMessageAsync(_roomId, "[CodeTester] WORKFLOW_COMPLETE - All agents finished!", ct);
             
             _logger.LogInformation("CodeTester completed testing");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in CodeTester");
-            await _client.EmitMessageAsync(_roomId, $"[CodeTester] Error: {ex.Message}");
+            await _client.EmitMessageAsync(_roomId, $"[CodeTester] Error: {ex.Message}", ct);
         }
     }
 }

@@ -2,6 +2,8 @@
 @using AgentR.Client
 @using AgentR.Shared
 @inject AgentClient Agent
+@inject NavigationManager Nav
+@inject ConfigService Config
 @rendermode InteractiveServer
 
 <PageTitle>AgentR | Mission Control</PageTitle>
@@ -102,30 +104,40 @@
     private int activeStep = 0;
     private List<string> budgetLogs = new();
     private List<string> gatewayLogs = new();
-    private string roomId = "mission-control-room";
+    private string roomId = "code-review-demo-room";
 
     protected override async Task OnInitializedAsync()
     {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("roomId", out var rid))
+        {
+            roomId = rid!;
+        }
+
         Agent.OnLog += (msg) => {
             if (msg.Contains("CREDITS") || msg.Contains("RECHARGE")) budgetLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {msg}");
             InvokeAsync(StateHasChanged);
         };
 
         Agent.OnSignalReceived += async frame => {
-            if (frame is ToolRequestFrame tr) {
-                gatewayLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 🔌 Handshake: {tr.ServerName}/{tr.ToolName} requested by {tr.SenderId}");
-                await TriggerViz(tr.ServerName);
-                await UpdateBalance();
-            }
-            if (frame is ToolResponseFrame resp) {
-                gatewayLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] ✅ Tool Result: Success={resp.Success}");
-                await UpdateBalance();
-            }
-            if (frame is MessageFrame m && m.SenderId == "FINOPS") {
-                 budgetLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {m.Content}");
-                 await UpdateBalance();
-            }
-            await InvokeAsync(StateHasChanged);
+            await InvokeAsync(async () => {
+                if (frame is ToolRequestFrame tr) {
+                    gatewayLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] 🔌 Handshake: {tr.ServerName}/{tr.ToolName} requested by {tr.SenderId}");
+                    StateHasChanged(); // Update logs immediately
+                    // Fire and forget viz to not block other updates, OR wait if sequential
+                    _ = TriggerViz(tr.ServerName); 
+                    await UpdateBalance();
+                }
+                else if (frame is ToolResponseFrame resp) {
+                    gatewayLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] ✅ Tool Result: Success={resp.Success}");
+                    await UpdateBalance();
+                }
+                else if (frame is MessageFrame m && m.SenderId == "FINOPS") {
+                     budgetLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {m.Content}");
+                     await UpdateBalance();
+                }
+                StateHasChanged();
+            });
         };
 
         await Agent.ConnectAsync();

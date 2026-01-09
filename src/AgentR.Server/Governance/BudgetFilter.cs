@@ -15,9 +15,12 @@ public class BudgetFilter : IHubFilter
     private const long CostPerTurn = 50;
     private const long CostPerToken = 1;
 
-    public BudgetFilter(IBudgetService budgetService)
+    private readonly IHubContext<AgentHub, IAgentClient> _hubContext;
+
+    public BudgetFilter(IBudgetService budgetService, IHubContext<AgentHub, IAgentClient> hubContext)
     {
         _budgetService = budgetService;
+        _hubContext = hubContext;
     }
 
     public async ValueTask<object?> InvokeMethodAsync(
@@ -25,12 +28,14 @@ public class BudgetFilter : IHubFilter
     {
         string? roomId = null;
         long cost = 0;
+        string action = "";
 
         // 1. Identify context and calculate estimated cost
         if (context.HubMethodName == "RequestTurn")
         {
             roomId = context.HubMethodArguments[0]?.ToString();
             cost = CostPerTurn;
+            action = "Turn Request";
         }
         else if (context.HubMethodName == "Broadcast")
         {
@@ -43,6 +48,7 @@ public class BudgetFilter : IHubFilter
                 if (frame is ThinkingFrame || frame is MessageFrame)
                 {
                     cost = CostPerToken;
+                    action = "Token Generation";
                 }
             }
         }
@@ -63,6 +69,14 @@ public class BudgetFilter : IHubFilter
 
             // C. Post-Deduction: Charge the wallet only if the call succeeded
             await _budgetService.DeductFundsAsync(roomId, cost);
+
+            // D. NOTIFY: Broadcast the charge to Mission Control (and anyone else listening)
+            await _hubContext.Clients.Group(roomId).ReceiveSignal(new MessageFrame 
+            {
+                SenderId = "FINOPS",
+                RoomId = roomId,
+                Content = $"📉 CHARGE: {action} cost {cost} credits."
+            });
 
             return result;
         }

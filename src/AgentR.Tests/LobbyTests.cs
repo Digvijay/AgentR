@@ -1,19 +1,25 @@
 using StackExchange.Redis;
 using System.Text.Json;
 using AgentR.Shared;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace AgentR.Tests;
 
-public class LobbyTests
+public class LobbyTests : IClassFixture<AgentRFactory>
 {
-    private const string RedisConnectionString = "localhost:6379,abortConnect=false";
+    private readonly AgentRFactory _factory;
+
+    public LobbyTests(AgentRFactory factory)
+    {
+        _factory = factory;
+    }
 
     [Fact]
     public async Task Lobby_ShouldCorrectlyRoundtripTickets()
     {
-        // 1. Connect to Redis (Localhost assumed for integration tests)
-        var redis = ConnectionMultiplexer.Connect(RedisConnectionString);
+        // 1. Connect to Redis via the factory's containerized instance
+        var redis = _factory.Services.GetRequiredService<IConnectionMultiplexer>();
         var db = redis.GetDatabase();
         var queueKey = "agentr:lobby:test-agent";
 

@@ -47,7 +47,13 @@ public class AgentClient
         _connection.On<ToolRequestFrame>("InvokeTool", HandleIncomingToolRequestAsync);
     }
 
-    public async Task ConnectAsync(CancellationToken ct = default) => await _connection.StartAsync(ct);
+    public async Task ConnectAsync(CancellationToken ct = default)
+    {
+        if (_connection.State == HubConnectionState.Disconnected)
+        {
+            await _connection.StartAsync(ct);
+        }
+    }
     public async Task JoinRoomAsync(string roomId, string[]? tags = null, CancellationToken ct = default) => await _connection.InvokeAsync("JoinRoom", roomId, tags, ct);
     public async Task RequestTurnAsync(string roomId, CancellationToken ct = default) => await _connection.InvokeAsync("RequestTurn", roomId, ct);
     public async Task ReleaseTurnAsync(string roomId, CancellationToken ct = default) => await _connection.InvokeAsync("ReleaseTurn", roomId, ct);

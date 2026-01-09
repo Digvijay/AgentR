@@ -12,6 +12,7 @@ namespace AgentR.Shared;
 [JsonDerivedType(typeof(DiscoveryFrame), "discovery")]
 [JsonDerivedType(typeof(ToolRequestFrame), "tool_request")]
 [JsonDerivedType(typeof(ToolResponseFrame), "tool_response")]
+[JsonDerivedType(typeof(FloorOpenFrame), "floor_open")]
 [Union(0, typeof(TurnGrantedFrame))]
 [Union(1, typeof(ThinkingFrame))]
 [Union(2, typeof(MessageFrame))]
@@ -20,6 +21,7 @@ namespace AgentR.Shared;
 [Union(5, typeof(DiscoveryFrame))]
 [Union(6, typeof(ToolRequestFrame))]
 [Union(7, typeof(ToolResponseFrame))]
+[Union(8, typeof(FloorOpenFrame))]
 public abstract record AgentFrame
 {
     public required string SenderId { get; init; }
@@ -78,6 +80,12 @@ public record ToolResponseFrame : AgentFrame
     public required string RequestId { get; init; }
     public bool Success { get; init; }
     public required string ResultJson { get; init; }
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
+public record FloorOpenFrame : AgentFrame
+{
+    // No extra fields - just a nudge to the room
 }
 
 [MessagePackObject(keyAsPropertyName: true)]

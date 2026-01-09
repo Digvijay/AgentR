@@ -36,6 +36,13 @@ public class AgentRFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseSetting("ConnectionStrings:redis", _redisContainer.GetConnectionString());
 
+        builder.ConfigureLogging(logging => 
+        {
+            logging.ClearProviders();
+            logging.AddConsole();
+            logging.SetMinimumLevel(LogLevel.Debug);
+        });
+
         builder.ConfigureTestServices(services =>
         {
             var redisConn = ConnectionMultiplexer.Connect(_redisContainer.GetConnectionString());
@@ -101,10 +108,12 @@ public class AgentRFactory : WebApplicationFactory<Program>, IAsyncLifetime
         }
     }
 
-    public HubConnection CreateHubConnection()
+    public HubConnection CreateHubConnection() => CreateHubConnection(Server);
+
+    public HubConnection CreateHubConnection(TestServer server)
     {
-        var handler = Server.CreateHandler();
-        var baseAddress = Server.BaseAddress;
+        var handler = server.CreateHandler();
+        var baseAddress = server.BaseAddress;
 
         return new HubConnectionBuilder()
             .WithUrl(new Uri(baseAddress, "agentHub"), o =>

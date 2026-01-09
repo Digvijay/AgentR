@@ -10,6 +10,7 @@
     <ProjectReference Include="..\AgentR.Demo.ServiceDefaults\AgentR.Demo.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\..\src\AgentR.Shared\AgentR.Shared.csproj" />
     <ProjectReference Include="..\..\..\src\AgentR.Client\AgentR.Client.csproj" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.2.0" />
   </ItemGroup>
 
 </Project>

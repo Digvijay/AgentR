@@ -17,7 +17,7 @@ public class HubIntegrationTests : IClassFixture<AgentRFactory>
 
     private HubConnection CreateClient() => _factory.CreateHubConnection();
 
-    [Fact(Skip = "Currently failing due to SignalR Hub filter pipeline issues in the containerized test environment. 'JoinRoom' fails to invoke correctly on the server during integration tests.")]
+    [Fact]
     public async Task HappyPath_AgentCanAcquireTurn()
     {
         // Arrange
@@ -32,7 +32,7 @@ public class HubIntegrationTests : IClassFixture<AgentRFactory>
         });
 
         await agent.StartAsync();
-        await agent.InvokeAsync("JoinRoom", "TestRoom1");
+        await agent.InvokeAsync("JoinRoom", "TestRoom1", null);
 
         // Act
         await agent.InvokeAsync("RequestTurn", "TestRoom1");
@@ -42,7 +42,7 @@ public class HubIntegrationTests : IClassFixture<AgentRFactory>
         Assert.True(result == turnGranted.Task, "Agent did not receive TurnGranted frame in time.");
     }
 
-    [Fact(Skip = "Currently failing due to SignalR Hub filter pipeline issues in the containerized test environment. 'JoinRoom' fails to invoke correctly on the server during integration tests.")]
+    [Fact]
     public async Task Concurrency_SecondAgentIsRejected()
     {
         // Arrange
@@ -60,9 +60,10 @@ public class HubIntegrationTests : IClassFixture<AgentRFactory>
         });
 
         await agentA.StartAsync();
+        await agentA.InvokeAsync("JoinRoom", "TestRoom2", null);
         await agentB.StartAsync();
-        await agentA.InvokeAsync("JoinRoom", "TestRoom2");
-        await agentB.InvokeAsync("JoinRoom", "TestRoom2");
+        await agentA.InvokeAsync("JoinRoom", "TestRoom2", null);
+        await agentB.InvokeAsync("JoinRoom", "TestRoom2", null);
 
         // Act
         // 1. Agent A takes the lock
@@ -75,10 +76,10 @@ public class HubIntegrationTests : IClassFixture<AgentRFactory>
         // Assert
         var result = await Task.WhenAny(agentB_Rejection.Task, Task.Delay(2000));
         Assert.True(result == agentB_Rejection.Task, "Agent B was not rejected.");
-        Assert.Contains("locked", agentB_Rejection.Task.Result);
+        Assert.Contains("locked", await agentB_Rejection.Task);
     }
     
-    [Fact(Skip = "Currently failing due to SignalR Hub filter pipeline issues in the containerized test environment. 'JoinRoom' fails to invoke correctly on the server during integration tests.")]
+    [Fact]
     public async Task Interrupt_ReleasesLockAutomatically()
     {
         // Arrange
@@ -92,7 +93,7 @@ public class HubIntegrationTests : IClassFixture<AgentRFactory>
         });
 
         await agent.StartAsync();
-        await agent.InvokeAsync("JoinRoom", "TestRoom3");
+        await agent.InvokeAsync("JoinRoom", "TestRoom3", null);
         await agent.InvokeAsync("RequestTurn", "TestRoom3");
 
         // Act - Simulate Admin Interrupt
@@ -150,5 +151,34 @@ public class HubIntegrationTests : IClassFixture<AgentRFactory>
         // Assert
         // This test might fail if the User Identity isn't mapped in AgentRFactory's MockAuth
         // But the logic is what we are verifying.
+    }
+    [Fact]
+    public async Task Reactive_AgentsAreNotifiedWhenFloorOpens()
+    {
+        // Arrange
+        var agentA = CreateClient();
+        var agentB = CreateClient();
+        var floorOpened = new TaskCompletionSource<bool>();
+
+        agentB.On<AgentFrame>("ReceiveSignal", frame =>
+        {
+            if (frame is FloorOpenFrame) floorOpened.SetResult(true);
+        });
+
+        await agentA.StartAsync();
+        await agentB.StartAsync();
+        await agentA.InvokeAsync("JoinRoom", "ReactiveRoom", null);
+        await agentB.InvokeAsync("JoinRoom", "ReactiveRoom", null);
+
+        // 1. Agent A takes the turn
+        await agentA.InvokeAsync("RequestTurn", "ReactiveRoom");
+        await Task.Delay(100);
+
+        // 2. Agent A releases it
+        await agentA.InvokeAsync("ReleaseTurn", "ReactiveRoom");
+
+        // 3. Assert - Agent B should get notified
+        var result = await Task.WhenAny(floorOpened.Task, Task.Delay(2000));
+        Assert.True(result == floorOpened.Task, "Agent B did not receive FloorOpenFrame.");
     }
 }

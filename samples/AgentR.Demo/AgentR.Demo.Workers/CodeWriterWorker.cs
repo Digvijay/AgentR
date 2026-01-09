@@ -23,16 +23,60 @@ public class CodeWriterWorker : BackgroundService
         _logger = logger;
     }
 
+    private string? _pendingTask;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("CodeWriter agent {AgentId} starting...", _agentId);
 
+        // Set up turn-based execution
+        _client.OnTurnGranted += async ct =>
+        {
+            if (!string.IsNullOrEmpty(_pendingTask))
+            {
+                var task = _pendingTask;
+                _pendingTask = null; // Clear so we don't repeat
+                await HandleTaskInternalAsync(task, ct);
+            }
+        };
+
         // Set up event handler for incoming messages
         _client.OnSignalReceived += async frame =>
         {
-            if (frame is MessageFrame msg && msg.Content.StartsWith("TASK:"))
+            if (frame is MessageFrame msg)
             {
-                await HandleTaskAsync(msg.Content.Replace("TASK:", "").Trim());
+                if (msg.Content.StartsWith("TASK:"))
+                {
+                    _pendingTask = msg.Content.Replace("TASK:", "").Trim();
+                    _logger.LogInformation("CodeWriter queued task, requesting turn...");
+                    try
+                    {
+                        await _client.RequestTurnAsync(_roomId, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to request turn: {Message}", ex.Message);
+                    }
+                }
+                else if (msg.SenderId == "HOST" && msg.Content.Contains("BUSY:"))
+                {
+                    _logger.LogWarning("Room busy. Waiting for floor to open...");
+                }
+            }
+            else if (frame is FloorOpenFrame)
+            {
+                if (!string.IsNullOrEmpty(_pendingTask))
+                {
+                    _logger.LogInformation("Floor is open. Requesting turn for pending task...");
+                    try
+                    {
+                        await _client.RequestTurnAsync(_roomId, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to request turn: {Message}", ex.Message);
+                    }
+                }
             }
         };
 
@@ -46,13 +90,16 @@ public class CodeWriterWorker : BackgroundService
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
-    private async Task HandleTaskAsync(string task)
+    private async Task HandleTaskInternalAsync(string task, CancellationToken ct)
     {
         try
         {
             _logger.LogInformation("CodeWriter received task: {Task}", task);
             
-            await _client.EmitMessageAsync(_roomId, $"[CodeWriter] Analyzing task: {task}");
+            await _client.EmitMessageAsync(_roomId, $"[CodeWriter] Analyzing task: {task}", ct);
+
+            // Simulate "thinking" and "working" delay
+            await Task.Delay(2000, ct); 
 
             string code;
             try
@@ -74,17 +121,17 @@ Provide the code in a single code block with proper comments. Keep it simple and
                 code = GenerateMockCode(task);
             }
 
-            await _client.EmitMessageAsync(_roomId, $"[CodeWriter] Code generated:\n```csharp\n{code}\n```");
+            await _client.EmitMessageAsync(_roomId, $"[CodeWriter] Code generated:\n```csharp\n{code}\n```", ct);
             
             // Pass to reviewer
-            await _client.EmitMessageAsync(_roomId, "REVIEW_REQUEST:" + code);
+            await _client.EmitMessageAsync(_roomId, "REVIEW_REQUEST:" + code, ct);
             
             _logger.LogInformation("CodeWriter completed task and sent to reviewer");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in CodeWriter");
-            await _client.EmitMessageAsync(_roomId, $"[CodeWriter] Error: {ex.Message}");
+            await _client.EmitMessageAsync(_roomId, $"[CodeWriter] Error: {ex.Message}", ct);
         }
     }
 

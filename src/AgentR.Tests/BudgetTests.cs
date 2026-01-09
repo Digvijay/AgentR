@@ -123,4 +123,67 @@ public class BudgetTests : IClassFixture<AgentRFactory>
         var balance = await budgetService.GetBalanceAsync(roomId);
         Assert.Equal(99, balance); // 100 - 1
     }
+    [Fact]
+    public async Task Hub_Deducts_Credits_For_Message_Frames()
+    {
+        // Arrange
+        var roomId = "BudgetTestRoom_Msg";
+        var connection = CreateClient();
+        await connection.StartAsync();
+        await connection.InvokeAsync("JoinRoom", roomId, null);
+
+        // Act - Request turn (50) + Send Message (1)
+        await connection.InvokeAsync("RequestTurn", roomId);
+        await connection.InvokeAsync("Broadcast", new MessageFrame { RoomId = roomId, SenderId = "Tester", Content = "Hello" });
+
+        // Assert
+        var balance = await connection.InvokeAsync<long>("GetRoomBalance", roomId);
+        // Initial 1000 - 50 - 1 = 949
+        Assert.Equal(949, balance);
+    }
+
+    [Fact]
+    public async Task Hub_Deducts_Credits_For_Thinking_Frames()
+    {
+        // Arrange
+        var roomId = "BudgetTestRoom_Think";
+        var connection = CreateClient();
+        await connection.StartAsync();
+        await connection.InvokeAsync("JoinRoom", roomId, null);
+
+        // Act - Request turn (50) + Send 5 thinking frames (5x1)
+        await connection.InvokeAsync("RequestTurn", roomId);
+        for(int i=0; i<5; i++)
+            await connection.InvokeAsync("Broadcast", new ThinkingFrame { RoomId = roomId, SenderId = "Tester", Content = "." });
+
+        // Assert
+        var balance = await connection.InvokeAsync<long>("GetRoomBalance", roomId);
+        // 1000 - 50 - 5 = 945
+        Assert.Equal(945, balance);
+    }
+
+    [Fact]
+    public async Task Hub_Allows_Interrupts_Even_When_Broke()
+    {
+        // Arrange
+        var roomId = "BudgetTestRoom_Broke";
+        var scope = _factory.Services.CreateScope();
+        var budgetService = scope.ServiceProvider.GetRequiredService<IBudgetService>();
+        await budgetService.HasFundsAsync(roomId); // Init 1000
+        await budgetService.DeductFundsAsync(roomId, 1000); // Now 0
+
+        var connection = CreateClient();
+        await connection.StartAsync();
+        await connection.InvokeAsync("JoinRoom", roomId, null);
+
+        // Act & Assert
+        // RequestTurn (50) should fail
+        await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync("RequestTurn", roomId));
+
+        // Interrupt (Free) should SUCCEED
+        await connection.InvokeAsync("Broadcast", new InterruptFrame { RoomId = roomId, SenderId = "Tester", Reason = "Emergency" });
+        
+        var balance = await connection.InvokeAsync<long>("GetRoomBalance", roomId);
+        Assert.Equal(0, balance);
+    }
 }

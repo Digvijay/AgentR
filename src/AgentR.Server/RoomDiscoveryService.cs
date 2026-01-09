@@ -29,10 +29,30 @@ public class RoomDiscoveryService
         await _db.SetAddAsync("agentr:rooms", roomId, flags: CommandFlags.None);
     }
 
-    public async Task UpdateAgentCountAsync(string roomId, int delta, CancellationToken ct = default)
+    public async Task UpdateAgentCountAsync(string roomId, string agentId, int delta, CancellationToken ct = default)
     {
         var key = GetRoomKey(roomId);
-        await _db.HashIncrementAsync(key, "agentCount", delta, flags: CommandFlags.None);
+        var agentsSetKey = $"{key}:agents";
+        var connsKey = $"{key}:agent_conns";
+        
+        // 1. Update connection reference count for this agent
+        var newConnCount = await _db.HashIncrementAsync(connsKey, agentId, delta);
+        
+        if (newConnCount <= 0)
+        {
+            // Last connection for this agent is gone
+            await _db.HashDeleteAsync(connsKey, agentId);
+            await _db.SetRemoveAsync(agentsSetKey, agentId);
+        }
+        else
+        {
+            // Agent has at least one active connection
+            await _db.SetAddAsync(agentsSetKey, agentId);
+        }
+
+        // 2. Authoritative unique agent count is the set cardinality
+        var uniqueCount = await _db.SetLengthAsync(agentsSetKey);
+        await _db.HashSetAsync(key, "agentCount", (int)uniqueCount);
     }
 
     public async Task<List<RoomInfo>> ListRoomsAsync(string[]? tags = null, CancellationToken ct = default)

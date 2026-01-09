@@ -64,7 +64,7 @@ if (!disableAuth)
     })
     .AddJwtBearer(options =>
     {
-        // For v1.0, we accept a "Fake" local token or valid Azure AD token
+        // For v1.0.0, we accept a "Fake" local token or valid Azure AD token
         // In production, you would point this to "https://login.microsoftonline.com/..."
         options.TokenValidationParameters = new TokenValidationParameters
         {

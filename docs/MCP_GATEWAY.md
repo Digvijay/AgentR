@@ -9,7 +9,7 @@ Normally, giving an agent "hands" (tools) requires:
 3.  Trusting that the agent won't accidentally leak or misuse the keys via prompt injection.
 
 ## 2. The Solution: AgentR as the MCP Gateway
-In v1.1, AgentR acts as the **Gateway**. Instead of the Agent holding the keys, the **Hub** holds them and runs the MCP Client.
+AgentR acts as the **Gateway**. Instead of the Agent holding the keys, the **Hub** holds them and runs the MCP Client.
 
 ### Architecture
 ```mermaid

@@ -110,9 +110,26 @@ public class AgentHub : Hub<IAgentClient>
     {
         ArgumentException.ThrowIfNullOrEmpty(roomId);
 
+        // 1. Avoid redundant joins for the same room
+        if (_localConnectionMap.TryGetValue(Context.ConnectionId, out var existingRoomId))
+        {
+            if (existingRoomId == roomId)
+            {
+                // Already in this room, just refresh registration/tags
+                await _discovery.RegisterRoomAsync(roomId, tags, Context.ConnectionAborted);
+                return;
+            }
+
+            // Switching rooms: Clean up old room state first
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, existingRoomId);
+            await _discovery.UpdateAgentCountAsync(existingRoomId, GetAgentId(), -1, Context.ConnectionAborted);
+            _logger.LogInformation("Connection {ConnectionId} left {OldRoom} to join {NewRoom}", Context.ConnectionId, existingRoomId, roomId);
+        }
+
+        // 2. Join the new room
         await Groups.AddToGroupAsync(Context.ConnectionId, roomId, Context.ConnectionAborted);
         await _discovery.RegisterRoomAsync(roomId, tags, Context.ConnectionAborted);
-        await _discovery.UpdateAgentCountAsync(roomId, 1, Context.ConnectionAborted);
+        await _discovery.UpdateAgentCountAsync(roomId, GetAgentId(), 1, Context.ConnectionAborted);
         
         _localConnectionMap[Context.ConnectionId] = roomId;
         _logger.LogInformation("Connection {ConnectionId} joined room {RoomId}", Context.ConnectionId, roomId);
@@ -217,7 +234,7 @@ public class AgentHub : Hub<IAgentClient>
 
         if (_localConnectionMap.TryRemove(Context.ConnectionId, out var roomId))
         {
-            await _discovery.UpdateAgentCountAsync(roomId, -1);
+            await _discovery.UpdateAgentCountAsync(roomId, GetAgentId(), -1);
         }
         
         await base.OnDisconnectedAsync(exception);
@@ -228,9 +245,11 @@ public class AgentHub : Hub<IAgentClient>
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomId);
         if (_localConnectionMap.TryRemove(Context.ConnectionId, out _))
         {
-            await _discovery.UpdateAgentCountAsync(roomId, -1, Context.ConnectionAborted);
+            await _discovery.UpdateAgentCountAsync(roomId, GetAgentId(), -1, Context.ConnectionAborted);
         }
     }
+
+    private string GetAgentId() => Context.UserIdentifier ?? Context.ConnectionId;
 
     private async Task ReleaseTurnInternal()
     {
@@ -247,6 +266,16 @@ public class AgentHub : Hub<IAgentClient>
             await handle.DisposeAsync();
             Context.Items.Remove("TurnLock");
             _logger.LogInformation("Lock released for {ConnectionId}", Context.ConnectionId);
+
+            // BROADCAST: Signal the room that the floor is now open
+            if (_localConnectionMap.TryGetValue(Context.ConnectionId, out var roomId))
+            {
+                await Clients.Group(roomId).ReceiveSignal(new FloorOpenFrame 
+                { 
+                    SenderId = "HOST", 
+                    RoomId = roomId 
+                });
+            }
         }
     }
 

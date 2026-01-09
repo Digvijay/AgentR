@@ -18,16 +18,17 @@ Most AI frameworks (Semantic Kernel, AutoGen) focus on the **Brain** (LLM reason
 
 | Feature | Description | Status |
 | :--- | :--- | :--- |
-| **Distributed Concurrency** | "Talking Stick" mutex backed by **Redis**. Ensures strict turn-taking across distributed workers. | ✅ v1.0 |
-| **Remote Interruptibility** | Stop runaway LLM loops instantly across the network via `CancellationToken` propagation. | ✅ v1.0 |
-| **High Frequency** | Binary **MessagePack** protocol for 70% smaller payloads and sub-millisecond latency. | ✅ v1.0 |
-| **Project Templates** | Scaffold enterprise-ready agents in seconds with `dotnet new agentr-worker`. | ✅ v1.0 |
-| **Python Interop** | First-class support for Python agents via the reference `agentr` package. | ✅ v1.0 |
-| **Enterprise Security** | JWT-based authentication and `[Authorize]` gateways for zero-trust orchestration. | ✅ v1.0 |
-| **Governance** | "HR Department" filters to block PII, profanity, or sensitive topics at the network level. | ✅ v1.0 |
-| **FinOps** | **Budget Controller**. Token-based quota management to prevent runaway AI costs. | ✅ v1.1 |
-| **Flight Recorder** | **Audit & Compliance** engine. Immutable logs with cold storage (Azure Blob/S3). | ✅ v1.1 |
-| **Cloud Native** | Built-in **.NET Aspire** orchestration for a unified local and cloud dev experience. | ✅ v1.0 |
+| **Distributed Concurrency** | "Talking Stick" mutex backed by **Redis**. Reactive `FloorOpenFrame` signaling for sub-millisecond turn handoffs. | ✅ v1.1.0 |
+| **Unique Identity** | **Phantom Agent Prevention**. Accurate `agentCount` via Redis Ref-counting and Set cardinality. | ✅ v1.1.0 |
+| **Remote Interruptibility** | Stop runaway LLM loops instantly across the network via `CancellationToken` propagation. | ✅ v1.1.0 |
+| **High Frequency** | Binary **MessagePack** protocol for 70% smaller payloads and sub-millisecond latency. | ✅ v1.1.0 |
+| **Project Templates** | Scaffold enterprise-ready agents in seconds with `dotnet new agentr-worker`. | ✅ v1.1.0 |
+| **Python Interop** | First-class support for Python agents via the reference `agentr` package. | ✅ v1.1.0 |
+| **Enterprise Security** | JWT-based authentication and `[Authorize]` gateways for zero-trust orchestration. | ✅ v1.1.0 |
+| **Governance** | "HR Department" filters to block PII, profanity, or sensitive topics at the network level. | ✅ v1.1.0 |
+| **FinOps** | **Budget Controller**. Token-based quota management to prevent runaway AI costs. | ✅ v1.1.0 |
+| **Flight Recorder** | **Audit & Compliance** engine. Immutable logs with cold storage (Azure Blob/S3). | ✅ v1.1.0 |
+| **Cloud Native** | Built-in **.NET Aspire** orchestration for a unified local and cloud dev experience. | ✅ v1.1.0 |
 
 ---
 
@@ -84,7 +85,7 @@ dotnet new agentr-worker -n MyAgent
 dotnet new agentr-worker-advanced -n MyProAgent
 ```
 
-### 🛡️ Reliability & Safety (New in v1.1.2)
+### 🛡️ Reliability & Safety
 AgentR now includes **Zombie Agent Protection**:
 *   **Auto-Release SDK**: Both .NET and Python clients automatically release turns if your code crashes.
 *   **Server WatchDog**: The Hub forcibly revokes locks after 60s (configurable via `AgentR:LeaseTimeoutSeconds`) if an agent hangs.
@@ -129,7 +130,7 @@ Use **.NET Aspire** to spin up Redis, the Hub, and your agent with one command:
 dotnet run --project src/AgentR.AppHost/AgentR.AppHost.csproj
 ```
 
-### 🎮 See it in Action (v1.1)
+### 🎮 See it in Action
 
 To experience the **Lobby Pattern** and **Scale-to-Zero** logic:
 1. **Start the Aspire AppHost**.
@@ -224,9 +225,10 @@ Pull Requests welcome.
 ## 🧪 Quality & Validation
 
 **📝 Validation Strategy:** 
-- **Control Plane**: Integration tests (xUnit/Testcontainers) validate locking and interrupts using JSON.
+- **Control Plane**: 32+ integration tests (xUnit/Testcontainers) validate locking, interrupts, and **Unique Identity** invariants.
 - **Data Plane**: Cross-platform E2E tests validate MessagePack binary serialization between C# and Python.
-- **Persistence**: New `AuditTests.cs` ensure the non-blocking Flight Recorder is bullet-proof.
+- **Resiliency**: `WatchdogTests.cs` and `ResiliencyTests.cs` ensure zero-leak operation during hard disconnects.
+- **Governance**: `SafetyTests.cs` and `BudgetTests.cs` verify network-level censorship and atomic billing.
 
 ---
 

@@ -23,15 +23,58 @@ public class CodeReviewerWorker : BackgroundService
         _logger = logger;
     }
 
+    private string? _pendingCode;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("CodeReviewer agent {AgentId} starting...", _agentId);
 
+        _client.OnTurnGranted += async ct =>
+        {
+            if (!string.IsNullOrEmpty(_pendingCode))
+            {
+                var code = _pendingCode;
+                _pendingCode = null;
+                await HandleReviewInternalAsync(code, ct);
+            }
+        };
+
         _client.OnSignalReceived += async frame =>
         {
-            if (frame is MessageFrame msg && msg.Content.StartsWith("REVIEW_REQUEST:"))
+            if (frame is MessageFrame msg)
             {
-                await HandleReviewAsync(msg.Content.Replace("REVIEW_REQUEST:", "").Trim());
+                if (msg.Content.StartsWith("REVIEW_REQUEST:"))
+                {
+                    _pendingCode = msg.Content.Replace("REVIEW_REQUEST:", "").Trim();
+                    _logger.LogInformation("CodeReviewer queued review, requesting turn...");
+                    try
+                    {
+                        await _client.RequestTurnAsync(_roomId, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to request turn: {Message}", ex.Message);
+                    }
+                }
+                else if (msg.SenderId == "HOST" && msg.Content.Contains("BUSY:"))
+                {
+                    _logger.LogWarning("Room busy. Waiting for floor to open...");
+                }
+            }
+            else if (frame is FloorOpenFrame)
+            {
+                if (!string.IsNullOrEmpty(_pendingCode))
+                {
+                    _logger.LogInformation("Floor is open. Requesting turn for pending review...");
+                    try
+                    {
+                        await _client.RequestTurnAsync(_roomId, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to request turn: {Message}", ex.Message);
+                    }
+                }
             }
         };
 
@@ -43,13 +86,16 @@ public class CodeReviewerWorker : BackgroundService
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
-    private async Task HandleReviewAsync(string code)
+    private async Task HandleReviewInternalAsync(string code, CancellationToken ct)
     {
         try
         {
             _logger.LogInformation("CodeReviewer analyzing code...");
             
-            await _client.EmitMessageAsync(_roomId, "[CodeReviewer] Reviewing code for quality and bugs...");
+            await _client.EmitMessageAsync(_roomId, "[CodeReviewer] Reviewing code for quality and bugs...", ct);
+
+            // Simulate analysis delay
+            await Task.Delay(2500, ct);
 
             string review;
             try
@@ -87,16 +133,16 @@ Keep your review concise and actionable.";
 **Verdict:** Code is production-ready with minor improvements suggested.";
             }
 
-            await _client.EmitMessageAsync(_roomId, $"[CodeReviewer] Review complete:\n{review}");
+            await _client.EmitMessageAsync(_roomId, $"[CodeReviewer] Review complete:\n{review}", ct);
             
             // Pass to tester if approved
             if (review.Contains("APPROVED"))
             {
-                await _client.EmitMessageAsync(_roomId, "TEST_REQUEST:" + code);
+                await _client.EmitMessageAsync(_roomId, "TEST_REQUEST:" + code, ct);
             }
             else
             {
-                await _client.EmitMessageAsync(_roomId, "[CodeReviewer] Code needs changes. Workflow paused.");
+                await _client.EmitMessageAsync(_roomId, "[CodeReviewer] Code needs changes. Workflow paused.", ct);
             }
             
             _logger.LogInformation("CodeReviewer completed review");
@@ -104,7 +150,7 @@ Keep your review concise and actionable.";
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in CodeReviewer");
-            await _client.EmitMessageAsync(_roomId, $"[CodeReviewer] Error: {ex.Message}");
+            await _client.EmitMessageAsync(_roomId, $"[CodeReviewer] Error: {ex.Message}", ct);
         }
     }
 }

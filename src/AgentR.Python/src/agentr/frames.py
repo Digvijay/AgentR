@@ -47,3 +47,7 @@ class ToolResponseFrame(AgentFrame):
     RequestId: str
     Success: bool
     ResultJson: str
+
+class FloorOpenFrame(AgentFrame):
+    """Signal that the room floor is available for turn requests."""
+    pass

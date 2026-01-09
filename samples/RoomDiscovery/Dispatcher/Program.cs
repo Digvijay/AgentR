@@ -44,7 +44,7 @@ while (true)
     Console.WriteLine("\n[Enter] to Assign a worker to 'Task-PR-123'");
     Console.ReadLine();
 
-    // Authoritative Assignment (New v1.1 Feature)
+    // Authoritative Assignment
     await client.AssignAgentAsync("Worker-01", "Task-PR-123");
     
     await client.JoinRoomAsync("Task-PR-123", new[] { "active-task" });
