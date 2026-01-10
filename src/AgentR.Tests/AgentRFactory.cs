@@ -57,7 +57,11 @@ public class AgentRFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
         builder.ConfigureTestServices(services =>
         {
-            var redisConn = ConnectionMultiplexer.Connect(_redisContainer.GetConnectionString());
+             var connectionString = !string.IsNullOrEmpty(_externalRedis)
+                ? _externalRedis
+                : _redisContainer.GetConnectionString();
+
+            var redisConn = ConnectionMultiplexer.Connect(connectionString);
             services.AddSingleton<IConnectionMultiplexer>(redisConn);
 
             // Disable the SignalR Redis backplane for integration tests.
