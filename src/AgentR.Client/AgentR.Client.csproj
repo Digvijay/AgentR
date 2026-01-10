@@ -5,8 +5,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -15,9 +15,7 @@
     <Nullable>enable</Nullable>
     
     <PackageId>AgentR.Client</PackageId>
-    <Version>1.1.0</Version>
-    <Authors>Digvijay</Authors>
-    <Company>Digvijay</Company>
+    <PackageId>AgentR.Client</PackageId>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>NuGetREADME.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/Digvijay/AgentR</PackageProjectUrl>
@@ -25,7 +23,7 @@
     <Description>The high-performance C# SDK for the AgentR Real-time Transport Protocol. Enables distributed AI agents with mutual exclusion and remote interruptibility.</Description>
     <PackageTags>ai;agents;signalr;distributed;concurrency;messaging;messagepack</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReleaseNotes>Official v1.1.0 Release: Python Interop, Project Templates, and stable Redis Locking.</PackageReleaseNotes>
+    <PackageReleaseNotes>Official v1.0.0 Release: Python Interop, Project Templates, and stable Redis Locking.</PackageReleaseNotes>
     
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>

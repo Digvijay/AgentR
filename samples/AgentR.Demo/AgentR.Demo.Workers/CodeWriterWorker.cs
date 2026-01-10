@@ -45,9 +45,9 @@ public class CodeWriterWorker : BackgroundService
         {
             if (frame is MessageFrame msg)
             {
-                if (msg.Content.StartsWith("TASK:"))
+                if (msg.Content.StartsWith("TASK:") || msg.Content.StartsWith("TASK_WITH_CONFIG|"))
                 {
-                    _pendingTask = msg.Content.Replace("TASK:", "").Trim();
+                    _pendingTask = msg.Content; // Store complete message
                     _logger.LogInformation("CodeWriter queued task, requesting turn...");
                     try
                     {
@@ -90,15 +90,57 @@ public class CodeWriterWorker : BackgroundService
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
-    private async Task HandleTaskInternalAsync(string task, CancellationToken ct)
+    private class LlmConfig { public string endpoint { get; set; } public string key { get; set; } public string model { get; set; } }
+
+    private async Task HandleTaskInternalAsync(string rawMessage, CancellationToken ct)
     {
+        string task = rawMessage;
+        string? configJson = null;
+        Kernel kernelToUse = _kernel;
+        
+        // Parse Config if present
+        if (rawMessage.StartsWith("TASK_WITH_CONFIG|"))
+        {
+            try 
+            {
+                var parts = rawMessage.Split('|', 3);
+                if (parts.Length == 3)
+                {
+                    var json = parts[1];
+                    configJson = json; // Capture for forwarding
+                    task = parts[2];
+                    var config = System.Text.Json.JsonSerializer.Deserialize<LlmConfig>(json);
+                    
+                    if (config != null)
+                    {
+                        _logger.LogInformation("Creating dynamic kernel for endpoint: {Endpoint}", config.endpoint);
+                        var builder = Kernel.CreateBuilder();
+                        builder.AddOpenAIChatCompletion(
+                            modelId: config.model,
+                            apiKey: config.key,
+                            httpClient: new HttpClient { BaseAddress = new Uri(config.endpoint) }
+                        );
+                        kernelToUse = builder.Build();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse dynamic config. Falling back to default.");
+            }
+        }
+        else if (rawMessage.StartsWith("TASK:"))
+        {
+            task = rawMessage.Replace("TASK:", "").Trim();
+        }
+        
         try
         {
             _logger.LogInformation("CodeWriter received task: {Task}", task);
             
             await _client.EmitMessageAsync(_roomId, $"[CodeWriter] Analyzing task: {task}", ct);
 
-            // Simulate "thinking" and "working" delay
+            // Simulate "working" delay
             await Task.Delay(2000, ct); 
 
             string code;
@@ -111,20 +153,28 @@ Task: {task}
 
 Provide the code in a single code block with proper comments. Keep it simple and functional.";
 
-                var response = await _kernel.InvokePromptAsync(prompt);
+                var response = await kernelToUse.InvokePromptAsync(prompt);
                 code = response.ToString();
             }
             catch (Exception llmEx)
             {
                 // Fallback to mock response if LLM is unavailable
                 _logger.LogWarning("LLM unavailable, using mock response: {Error}", llmEx.Message);
+                await _client.EmitMessageAsync(_roomId, $"[System] ⚠️ LLM Failed: {llmEx.Message} | Stack: {llmEx.StackTrace}", ct);
                 code = GenerateMockCode(task);
             }
 
             await _client.EmitMessageAsync(_roomId, $"[CodeWriter] Code generated:\n```csharp\n{code}\n```", ct);
             
-            // Pass to reviewer
-            await _client.EmitMessageAsync(_roomId, "REVIEW_REQUEST:" + code, ct);
+            // Pass to reviewer with config propagation
+            if (configJson != null)
+            {
+                await _client.EmitMessageAsync(_roomId, $"REVIEW_REQUEST_WITH_CONFIG|{configJson}|{code}", ct);
+            }
+            else
+            {
+                await _client.EmitMessageAsync(_roomId, "REVIEW_REQUEST:" + code, ct);
+            }
             
             _logger.LogInformation("CodeWriter completed task and sent to reviewer");
         }

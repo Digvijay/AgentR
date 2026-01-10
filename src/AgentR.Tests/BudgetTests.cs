@@ -59,7 +59,7 @@ public class BudgetTests : IClassFixture<AgentRFactory>
         var scope = _factory.Services.CreateScope();
         var budgetService = scope.ServiceProvider.GetRequiredService<IBudgetService>();
         await budgetService.HasFundsAsync(roomId); // Trigger initial 1000
-        await budgetService.DeductFundsAsync(roomId, 980); // Leave only 20 (less than 50 for a turn)
+        await budgetService.DeductFundsAsync(roomId, 996); // Leave only 4 (less than 5 for a turn)
 
         var connection = CreateClient();
         await connection.StartAsync();
@@ -98,7 +98,7 @@ public class BudgetTests : IClassFixture<AgentRFactory>
         await connection.InvokeAsync("RequestTurn", roomId);
         
         var remaining = await budgetService.GetBalanceAsync(roomId);
-        Assert.Equal(450, remaining); // 500 - 50 (turn cost)
+        Assert.Equal(495, remaining); // 500 - 5 (turn cost)
     }
 
     [Fact]
@@ -138,8 +138,8 @@ public class BudgetTests : IClassFixture<AgentRFactory>
 
         // Assert
         var balance = await connection.InvokeAsync<long>("GetRoomBalance", roomId);
-        // Initial 1000 - 50 - 1 = 949
-        Assert.Equal(949, balance);
+        // Initial 1000 - 5 - 1 = 994
+        Assert.Equal(994, balance);
     }
 
     [Fact]
@@ -158,8 +158,8 @@ public class BudgetTests : IClassFixture<AgentRFactory>
 
         // Assert
         var balance = await connection.InvokeAsync<long>("GetRoomBalance", roomId);
-        // 1000 - 50 - 5 = 945
-        Assert.Equal(945, balance);
+        // 1000 - 5 - 5 = 990
+        Assert.Equal(990, balance);
     }
 
     [Fact]

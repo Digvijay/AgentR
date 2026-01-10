@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
 using AgentR.Server.Gateways;
 using AgentR.Server.Governance;
+using System.Diagnostics.Metrics;
 
 namespace AgentR.Server;
 
@@ -17,7 +18,11 @@ public class AgentHub : Hub<IAgentClient>
     private readonly IDistributedLockProvider _lockProvider;
     private readonly RoomDiscoveryService _discovery;
     private readonly IDatabase _redis;
-
+    
+    // --- OTel Metrics ---
+    private static readonly Meter MyMeter = new("AgentR.Server", "1.0");
+    private static readonly Counter<double> BudgetBurned = MyMeter.CreateCounter<double>("agentr.budget.burned", "USD", "Money spent on tokens");
+    private static readonly Counter<long> LockContention = MyMeter.CreateCounter<long>("agentr.lock.contention", "failures", "Failed lock acquisition attempts");
     
     // We still track local connections to handle disconnects, 
     // but the AUTHORITY is now Redis.
@@ -106,6 +111,22 @@ public class AgentHub : Hub<IAgentClient>
         });
     }
 
+    public Task SetBudgetStatus(bool enabled)
+    {
+        _budget.IsEnforcementEnabled = enabled;
+        return Clients.All.ReceiveSignal(new MessageFrame 
+        { 
+            SenderId = "FINOPS", 
+            RoomId = "SYSTEM", 
+            Content = enabled ? "🔒 Budget Enforcement ENABLED" : "🔓 Budget Enforcement DISABLED" 
+        });
+    }
+
+    public Task<bool> GetBudgetStatus()
+    {
+        return Task.FromResult(_budget.IsEnforcementEnabled);
+    }
+
     public async Task JoinRoom(string roomId, string[]? tags = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(roomId);
@@ -141,6 +162,15 @@ public class AgentHub : Hub<IAgentClient>
         // We verify if THIS connection holds the distributed lock handle.
         if (Context.Items.TryGetValue("TurnLock", out _))
         {
+            // OTel: Track Money Burn
+            if (frame is ThinkingFrame)
+            {
+                BudgetBurned.Add(0.001, 
+                    new KeyValuePair<string, object?>("room_id", frame.RoomId),
+                    new KeyValuePair<string, object?>("agent_id", frame.SenderId)
+                );
+            }
+        
             // Send to everyone else
             await Clients.GroupExcept(frame.RoomId, Context.ConnectionId)
                          .ReceiveSignal(frame);
@@ -186,6 +216,9 @@ public class AgentHub : Hub<IAgentClient>
         }
         else
         {
+            // OTel: Record Contention
+            LockContention.Add(1, new KeyValuePair<string, object?>("room_id", roomId));
+        
             // FAIL: Someone else holds the lock (maybe on another server)
             AgentFrame signal = new MessageFrame 
             { 

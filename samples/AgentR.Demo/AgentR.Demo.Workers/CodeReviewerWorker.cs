@@ -43,9 +43,9 @@ public class CodeReviewerWorker : BackgroundService
         {
             if (frame is MessageFrame msg)
             {
-                if (msg.Content.StartsWith("REVIEW_REQUEST:"))
+                if (msg.Content.StartsWith("REVIEW_REQUEST:") || msg.Content.StartsWith("REVIEW_REQUEST_WITH_CONFIG|"))
                 {
-                    _pendingCode = msg.Content.Replace("REVIEW_REQUEST:", "").Trim();
+                    _pendingCode = msg.Content;
                     _logger.LogInformation("CodeReviewer queued review, requesting turn...");
                     try
                     {
@@ -86,8 +86,49 @@ public class CodeReviewerWorker : BackgroundService
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
-    private async Task HandleReviewInternalAsync(string code, CancellationToken ct)
+    private class LlmConfig { public string endpoint { get; set; } public string key { get; set; } public string model { get; set; } }
+
+    private async Task HandleReviewInternalAsync(string rawMessage, CancellationToken ct)
     {
+        string code = rawMessage;
+        string? configJson = null;
+        Kernel kernelToUse = _kernel;
+
+        if (rawMessage.StartsWith("REVIEW_REQUEST_WITH_CONFIG|"))
+        {
+            try 
+            {
+                var parts = rawMessage.Split('|', 3);
+                if (parts.Length == 3)
+                {
+                    var json = parts[1];
+                    configJson = json;
+                    code = parts[2];
+                    var config = System.Text.Json.JsonSerializer.Deserialize<LlmConfig>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    
+                    if (config != null)
+                    {
+                        var builder = Kernel.CreateBuilder();
+                        builder.AddOpenAIChatCompletion(
+                            modelId: config.model,
+                            apiKey: config.key,
+                            httpClient: new HttpClient { BaseAddress = new Uri(config.endpoint) }
+                        );
+                        kernelToUse = builder.Build();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse dynamic config in Reviewer");
+                await _client.EmitMessageAsync(_roomId, $"[System] ⚠️ Config Parse Error: {ex.Message}", ct);
+            }
+        }
+        else if (rawMessage.StartsWith("REVIEW_REQUEST:"))
+        {
+            code = rawMessage.Replace("REVIEW_REQUEST:", "").Trim();
+        }
+
         try
         {
             _logger.LogInformation("CodeReviewer analyzing code...");
@@ -110,15 +151,16 @@ Code to review:
 
 Keep your review concise and actionable.";
 
-                var response = await _kernel.InvokePromptAsync(prompt);
+                var response = await kernelToUse.InvokePromptAsync(prompt);
                 review = response.ToString();
             }
             catch (Exception llmEx)
             {
                 _logger.LogWarning("LLM unavailable, using mock review: {Error}", llmEx.Message);
+                await _client.EmitMessageAsync(_roomId, $"[System] ⚠️ Reviewer LLM Failed: {llmEx.Message}", ct);
                 review = @"**Code Review Results**
 
-✅ **APPROVED**
+✅ **APPROVED** (Fallback Mock)
 
 **Strengths:**
 - Clean, readable code structure
@@ -138,11 +180,28 @@ Keep your review concise and actionable.";
             // Pass to tester if approved
             if (review.Contains("APPROVED"))
             {
-                await _client.EmitMessageAsync(_roomId, "TEST_REQUEST:" + code, ct);
+                if (configJson != null)
+                {
+                    await _client.EmitMessageAsync(_roomId, $"TEST_REQUEST_WITH_CONFIG|{configJson}|{code}", ct);
+                }
+                else
+                {
+                    await _client.EmitMessageAsync(_roomId, "TEST_REQUEST:" + code, ct);
+                }
             }
             else
             {
-                await _client.EmitMessageAsync(_roomId, "[CodeReviewer] Code needs changes. Workflow paused.", ct);
+                await _client.EmitMessageAsync(_roomId, "[CodeReviewer] Code needs changes. Sending back to Writer...", ct);
+                var fixTask = $"Fix the code based on this review:\n{review}\n\nOriginal Code:\n{code}";
+                
+                if (configJson != null)
+                {
+                    await _client.EmitMessageAsync(_roomId, $"TASK_WITH_CONFIG|{configJson}|{fixTask}", ct);
+                }
+                else
+                {
+                    await _client.EmitMessageAsync(_roomId, $"TASK: {fixTask}", ct);
+                }
             }
             
             _logger.LogInformation("CodeReviewer completed review");

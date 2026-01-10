@@ -1,7 +1,7 @@
 # AgentR 🧠⚡🛡️
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Version](https://img.shields.io/badge/version-v1.1.0-blue)
+![Version](https://img.shields.io/badge/version-v1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **The Enterprise-Grade Real-time Protocol for Distributed AI Agents.**
@@ -18,17 +18,17 @@ Most AI frameworks (Semantic Kernel, AutoGen) focus on the **Brain** (LLM reason
 
 | Feature | Description | Status |
 | :--- | :--- | :--- |
-| **Distributed Concurrency** | "Talking Stick" mutex backed by **Redis**. Reactive `FloorOpenFrame` signaling for sub-millisecond turn handoffs. | ✅ v1.1.0 |
-| **Unique Identity** | **Phantom Agent Prevention**. Accurate `agentCount` via Redis Ref-counting and Set cardinality. | ✅ v1.1.0 |
-| **Remote Interruptibility** | Stop runaway LLM loops instantly across the network via `CancellationToken` propagation. | ✅ v1.1.0 |
-| **High Frequency** | Binary **MessagePack** protocol for 70% smaller payloads and sub-millisecond latency. | ✅ v1.1.0 |
-| **Project Templates** | Scaffold enterprise-ready agents in seconds with `dotnet new agentr-worker`. | ✅ v1.1.0 |
-| **Python Interop** | First-class support for Python agents via the reference `agentr` package. | ✅ v1.1.0 |
-| **Enterprise Security** | JWT-based authentication and `[Authorize]` gateways for zero-trust orchestration. | ✅ v1.1.0 |
-| **Governance** | "HR Department" filters to block PII, profanity, or sensitive topics at the network level. | ✅ v1.1.0 |
-| **FinOps** | **Budget Controller**. Token-based quota management to prevent runaway AI costs. | ✅ v1.1.0 |
-| **Flight Recorder** | **Audit & Compliance** engine. Immutable logs with cold storage (Azure Blob/S3). | ✅ v1.1.0 |
-| **Cloud Native** | Built-in **.NET Aspire** orchestration for a unified local and cloud dev experience. | ✅ v1.1.0 |
+| **Distributed Concurrency** | "Talking Stick" mutex backed by **Redis**. Reactive `FloorOpenFrame` signaling for sub-millisecond turn handoffs. | ✅ v1.0.0 |
+| **Unique Identity** | **Phantom Agent Prevention**. Accurate `agentCount` via Redis Ref-counting and Set cardinality. | ✅ v1.0.0 |
+| **Remote Interruptibility** | Stop runaway LLM loops instantly across the network via `CancellationToken` propagation. | ✅ v1.0.0 |
+| **High Frequency** | Binary **MessagePack** protocol for 70% smaller payloads and sub-millisecond latency. | ✅ v1.0.0 |
+| **Project Templates** | Scaffold enterprise-ready agents in seconds with `dotnet new agentr-worker`. | ✅ v1.0.0 |
+| **Python Interop** | First-class support for Python agents via the reference `agentr` package. | ✅ v1.0.0 |
+| **Enterprise Security** | JWT-based authentication and `[Authorize]` gateways for zero-trust orchestration. | ✅ v1.0.0 |
+| **Governance** | "HR Department" filters to block PII, profanity, or sensitive topics at the network level. | ✅ v1.0.0 |
+| **FinOps** | **Budget Controller**. Token-based quota management to prevent runaway AI costs. | ✅ v1.0.0 |
+| **Flight Recorder** | **Audit & Compliance** engine. Immutable logs with cold storage (Azure Blob/S3). | ✅ v1.0.0 |
+| **Cloud Native** | Built-in **.NET Aspire** orchestration for a unified local and cloud dev experience. | ✅ v1.0.0 |
 
 ---
 
@@ -125,15 +125,37 @@ AgentR is a transport layer. It doesn't care which LLM you use. The `agentr-work
 | **Custom** | Any LLM with a C# or Python SDK |
 
 ### 3. Launch the Stack
-Use **.NET Aspire** to spin up Redis, the Hub, and your agent with one command:
+
+**Option A: Headless Core (Server + Worker)**
 ```bash
 dotnet run --project src/AgentR.AppHost/AgentR.AppHost.csproj
 ```
 
-### 🎮 See it in Action
+**Option B: Full Interactive Demo (UI + Lobby + Replay)**
+```bash
+dotnet run --project samples/AgentR.Demo/AgentR.Demo.AppHost/AgentR.Demo.AppHost.csproj
+```
 
-To experience the **Lobby Pattern** and **Scale-to-Zero** logic:
-1. **Start the Aspire AppHost**.
+### ☁️ Deploy to Azure (Production)
+AgentR supports one-click deployment via the **Azure Developer CLI (`azd`)**. This provisions [Azure Container Apps](https://azure.microsoft.com/en-us/products/container-apps) and Redis automatically.
+
+1. **Install azd**: [Get Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd)
+2. **Login**: `azd auth login`
+3. **Deploy**:
+   ```bash
+   azd up
+   ```
+   This will use the `azure.yaml` configuration to provision and deploy the entire Control Plane (Server + Worker) to your Azure subscription.
+
+   > **Note**: The project includes synthesized Bicep templates in `infra/`.
+   
+   [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fagentr-org%2Fagentr%2Fmaster%2Finfra%2Fmain.json)
+   *(Requires compiling `infra/main.bicep` to `main.json` if not using `azd`)*
+
+### 🎮 See the Demo in Action
+
+To experience the **Lobby Pattern** and **Scale-to-Zero** logic (requires Option B):
+1. **Start the Demo AppHost**.
 2. Go to the **"Agent Lobby"** in the sidebar.
 3. Click **"Summon DotNet Agent"** and watch the logs in your terminal!
 
@@ -141,10 +163,20 @@ To experience the **Lobby Pattern** and **Scale-to-Zero** logic:
 
 ## 📂 Project Ecosystem
 
-*   **`src/AgentR.Client`**: High-performance .NET SDK.
-*   **`src/AgentR.Server`**: The Hub with Redis backplane and Content Safety.
+### Core Platform (Production Ready)
+*   **`src/AgentR.Server`**: The Headless Hub. Contains all synchronization logic (Redis Locks), MCP Gateway, and Governance enforcement. **No UI.**
+*   **`src/AgentR.Client`**: High-performance .NET SDK for building agents.
 *   **`src/AgentR.Python`**: Native Python interop bridge.
-*   **`samples/AgentR.Demo`**: A full-stack Aspire demo with a **Session Replay** portal.
+
+### Samples & Templates (Reference Implementation)
+*   **`samples/AgentR.Demo`**: A comprehensive Aspire application demonstrating:
+    *   **Mission Control UI**: Dashboard for monitoring rooms and budgets.
+    *   **Lobby UI**: Visualizer for the KEDA Scale-to-Zero pattern.
+    *   **Session Replay**: UI for the "Flight Recorder" audit logs.
+*   **`templates/`**: `dotnet new` scaffolds for creating your own agents.
+
+**Note**: Features like "Mission Control" and "Agent Lobby" are reference UIs provided in the Demo project. The Core Server provides the *APIs* (SignalR Hub blocks) that enable these UIs, but does not ship with a frontend.
+
 *   **`docs/FLIGHT_RECORDER.md`**: Specs for the Auditing and Session Replay system.
 *   **`docs/KEDA_AUTOSCALING.md`**: Guide for Scale-to-Zero and the Lobby Pattern.
 *   **`docs/BUDGET_CONTROLLER.md`**: FinOps specs for Token-based Quota management.
@@ -164,10 +196,10 @@ We enforce strict coding standards to guarantee performance and stability:
 AgentR includes an enterprise-grade auditing engine designed for strictly regulated industries:
 
 - 💸 **FinOps Budgeting**: "Toll Booth" pricing model for OpenAI/Anthropic costs.
-- 🔌 **MCP Gateway**: Secure transport for Anthropic's Model Context Protocol.
+- 🔌 **Dynamic MCP Gateway**: Connect to any external MCP server via standard `mcp.json` configuration.
 - ⚡ **KEDA Scale-to-Zero**: Integrated with Kubernetes for event-driven agent scaling.
 - **Immutable Log Trails**: Every frame (Thinking, Messaging, Turns) is captured and hashed.
-- **Cold Storage**: Pluggable storage providers (Local File, Azure Blob, S3) for long-term retention.
+- **Resilient Flight Recorder**: "Immortal" background service that survives crashes and buffers data during storage outages.
 - **Session Replay**: Watch conversation "tape" millisecond-by-millisecond to debug agent hallucinations.
 
 **💡 TIP**

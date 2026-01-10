@@ -7,6 +7,8 @@ using System.Security.Claims;
 using System.Text;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.AddServiceDefaults();
+
 
 // Configuration
 var hubUrl = Environment.GetEnvironmentVariable("HubUrl") ?? "https://localhost:5001";

@@ -35,6 +35,7 @@ public class AgentRFactory : WebApplicationFactory<Program>, IAsyncLifetime
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:redis", _redisContainer.GetConnectionString());
+        builder.UseSetting("AgentR:EnableBudgets", "true");
 
         builder.ConfigureLogging(logging => 
         {

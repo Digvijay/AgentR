@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+        "test_runner": {
+            "command": "/bin/bash",
+            "args": [
+                "/Users/digvijay/source/github/AgentR/mock_mcp.sh"
+            ]
+        },
+        "github": {
+            "command": "echo",
+            "args": [
+                "Mock JS GitHub Server"
+            ]
+        }
+    }
+}

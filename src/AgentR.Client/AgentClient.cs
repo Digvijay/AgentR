@@ -63,6 +63,16 @@ public class AgentClient
     public async Task<long> GetBalanceAsync(string roomId, CancellationToken ct = default) => await _connection.InvokeAsync<long>("GetRoomBalance", roomId, ct);
     public async Task TopUpAsync(string roomId, long amount, CancellationToken ct = default) => await _connection.InvokeAsync("TopUpRoom", roomId, amount, ct);
 
+    public async Task SetBudgetStatusAsync(bool enabled, CancellationToken ct = default)
+    {
+        await _connection.InvokeAsync("SetBudgetStatus", enabled, ct);
+    }
+
+    public async Task<bool> GetBudgetStatusAsync(CancellationToken ct = default)
+    {
+        return await _connection.InvokeAsync<bool>("GetBudgetStatus", ct);
+    }
+
     public async Task DisconnectAsync(CancellationToken ct = default) => await _connection.StopAsync(ct);
     
     public async Task ListRoomsAsync(string[]? tags = null, CancellationToken ct = default)

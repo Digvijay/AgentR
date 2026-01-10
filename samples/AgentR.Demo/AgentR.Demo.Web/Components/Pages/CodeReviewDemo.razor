@@ -4,6 +4,7 @@
 @inject AgentClient Agent
 @inject IJSRuntime JS
 @inject ConfigService Config
+@implements IAsyncDisposable
 @inject DemoState State
 @rendermode InteractiveServer
 
@@ -47,7 +48,16 @@
                 <h3>📋 Activity Log</h3>
                 @if (State.ActivityLog.Any())
                 {
-                    <button class="copy-btn" @onclick="CopyForReplayer">💾 Copy for Replayer</button>
+                    <button class="copy-btn @(isCopied ? "success" : "")" @onclick="CopyForReplayer">
+                        @if (isCopied)
+                        {
+                            <span>✔️ Copied!</span>
+                        }
+                        else
+                        {
+                            <span>💾 Copy Log</span>
+                        }
+                    </button>
                 }
             </div>
             <div class="log-entries">
@@ -58,7 +68,7 @@
                         <span class="agent-name">[@entry.Agent]</span>
                         @if (entry.IsSimulated)
                         {
-                            <span class="sim-badge">(SIMULATED)</span>
+                            <span class="sim-badge">(SIM)</span>
                         }
                         <span class="message">@entry.Message</span>
                     </div>
@@ -85,21 +95,58 @@
 
 @code {
     private string roomId = "code-review-demo-room";
+    
+    // Store handlers to unsubscribe later
+    private Action<string>? _logHandler;
+    private Action<AgentFrame>? _signalHandler;
+    private Func<CancellationToken, Task>? _turnHandler;
 
     protected override async Task OnInitializedAsync()
     {
         State.OnChange += StateHasChanged; // Re-render when state changes
 
-        Agent.OnTurnGranted += async ct =>
+        // 1. Define Handlers
+        _logHandler = msg => 
         {
-            if (State.IsWorkflowRunning && State.CurrentAgent == "writer" && !string.IsNullOrEmpty(State.TaskDescription))
+            if (msg.Contains("BLOCKED") || msg.Contains("FAILED"))
             {
-                AddLog("System", "Turn granted. Emitting task...");
-                await Agent.EmitMessageAsync(roomId, $"TASK: {State.TaskDescription}");
+               AddLog("System", $"🚨 {msg}");
             }
         };
 
-        Agent.OnSignalReceived += async frame =>
+        _turnHandler = async ct =>
+        {
+            // PROPER SIMULATION SUPPORT:
+            // In simulation, RunSimulation() manages the flow. We must prevent ExecuteTurn
+            // from auto-releasing the lock immediately by holding this task open.
+            if (!Config.HasRealConfig)
+            {
+                try { await Task.Delay(Timeout.Infinite, ct); } catch { }
+                return;
+            }
+
+            // Real Agent Logic (Writer)
+            if (State.IsWorkflowRunning && State.CurrentAgent == "writer" && !string.IsNullOrEmpty(State.TaskDescription))
+            {
+                AddLog("System", "Turn granted. Emitting task...");
+                
+                string content;
+                if (Config.HasRealConfig)
+                {
+                    var config = new { endpoint = Config.LlmEndpoint, key = Config.LlmKey, model = Config.LlmModel };
+                    var json = System.Text.Json.JsonSerializer.Serialize(config);
+                    content = $"TASK_WITH_CONFIG|{json}|{State.TaskDescription}";
+                }
+                else
+                {
+                    content = $"TASK: {State.TaskDescription}";
+                }
+                
+                await Agent.EmitMessageAsync(roomId, content);
+            }
+        };
+
+        _signalHandler = async frame =>
         {
             await InvokeAsync(async () =>
             {
@@ -118,6 +165,8 @@
                     if (msg.SenderId.Contains("writer")) State.CurrentAgent = "writer";
                     else if (msg.SenderId.Contains("reviewer")) State.CurrentAgent = "reviewer";
                     else if (msg.SenderId.Contains("tester")) State.CurrentAgent = "tester";
+                    // Fallback for simulation messages where SenderId might be generic but content implies role
+                    else if (msg.Content.Contains("TEST_REQUEST")) State.CurrentAgent = "tester";
                     
                     // Extract code if present in standard markdown blocks
                     if (msg.Content.Contains("```"))
@@ -156,12 +205,49 @@
                         State.CurrentAgent = "";
                         AddLog("System", "🏁 Workflow completed successfully!");
                     }
+                    else if (msg.Content.Contains("Workflow paused"))
+                    {
+                        State.IsWorkflowRunning = false;
+                        AddLog("System", "⏸️ Workflow suspended due to issues.");
+                    }
                     else if (msg.Content.Contains("Test Results:"))
                     {
                         State.TestResults = msg.Content.Substring(msg.Content.IndexOf("Test Results:")).Trim();
                     }
                     
                     State.NotifyStateChanged();
+                }
+                else if (frame is ToolResponseFrame resp)
+                {
+                    // This handles the response from the test_runner MCP tool
+                    if (resp.Success)
+                    {
+                        AddLog("tester", "Test Execution Successful.", true); // Clean log message
+                        
+                        // Parse and Format the JSON for display
+                        try 
+                        {
+                            // Pretty print the JSON
+                            using var doc = System.Text.Json.JsonDocument.Parse(resp.ResultJson);
+                            var option = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                            State.TestResults = System.Text.Json.JsonSerializer.Serialize(doc.RootElement, option);
+                        }
+                        catch
+                        {
+                            State.TestResults = resp.ResultJson; // Fallback to raw string
+                        }
+
+                        AddLog("System", "🏁 WORKFLOW_COMPLETE");
+                        State.IsWorkflowRunning = false;
+                        State.CurrentAgent = "";
+                        State.NotifyStateChanged(); // FORCE UI UPDATE
+                    }
+                    else 
+                    {
+                         AddLog("tester", $"❌ Tool Error: {resp.ResultJson}");
+                         State.IsWorkflowRunning = false; // Stop on error
+                         State.NotifyStateChanged();
+                    }
                 }
                 else if (frame is FloorOpenFrame)
                 {
@@ -181,6 +267,11 @@
             });
         };
 
+        // 2. Subscribe
+        Agent.OnLog += _logHandler;
+        Agent.OnTurnGranted += _turnHandler;
+        Agent.OnSignalReceived += _signalHandler;
+        
         await Agent.ConnectAsync();
         await Agent.JoinRoomAsync(roomId);
         
@@ -188,6 +279,19 @@
         if (!State.ActivityLog.Any())
             AddLog("System", "Connected to AgentR Hub. Ready to start workflow.");
     }
+
+    public ValueTask DisposeAsync()
+    {
+        if (_logHandler != null) Agent.OnLog -= _logHandler;
+        if (_turnHandler != null) Agent.OnTurnGranted -= _turnHandler;
+        if (_signalHandler != null) Agent.OnSignalReceived -= _signalHandler;
+        
+        State.OnChange -= StateHasChanged;
+        
+        return ValueTask.CompletedTask;
+    }
+
+    private bool isCopied = false;
 
     private async Task CopyForReplayer()
     {
@@ -202,7 +306,14 @@
 
         var json = System.Text.Json.JsonSerializer.Serialize(records);
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", json);
-        AddLog("System", "✅ Session copied to clipboard in Flight Recorder format!");
+        
+        // Visual feedback
+        isCopied = true;
+        StateHasChanged();
+        
+        await Task.Delay(2000);
+        isCopied = false;
+        StateHasChanged();
     }
 
     private async Task StartWorkflow()
@@ -221,10 +332,17 @@
         }
         else
         {
-            // Use different credentials for the agents in real mode? 
-            // For now, let's just trigger the simulation if no real agents are active.
-            // In a real world, the user would have real workers running.
-            _ = RunSimulation(); 
+            // Real Mode: Request turn to announce the task.
+            // The OnTurnGranted handler will handle emitting the task to the room.
+            try 
+            {
+                await Agent.RequestTurnAsync(roomId);
+            }
+            catch (Exception ex)
+            {
+                 AddLog("System", $"⚠️ Active Worker Init Failed: {ex.Message}");
+                 State.IsWorkflowRunning = false;
+            }
         }
         
         State.NotifyStateChanged();
@@ -240,6 +358,7 @@
             await Task.Delay(1500);
             var code = "public class Solution {\n  public int Result() => 42; // Simulated logic\n}";
             await Agent.EmitMessageAsync(roomId, "REVIEW_REQUEST: ```csharp\n" + code + "\n```");
+            await Agent.ReleaseTurnAsync(roomId); // Explicit release
             
             // 2. Reviewer
             await Task.Delay(2000);
@@ -247,13 +366,18 @@
             await Agent.EmitThinkingAsync(roomId, "Analyzing complexity and clean code principles...");
             await Task.Delay(2000);
             await Agent.EmitMessageAsync(roomId, "TEST_REQUEST: Code looks optimal. Requesting unit tests.");
+            await Agent.ReleaseTurnAsync(roomId); // Explicit release
 
             // 3. Tester
             await Task.Delay(2000);
             await Agent.RequestTurnAsync(roomId);
-            await Agent.EmitThinkingAsync(roomId, "Compiling and running NUnit test suite...");
+            await Agent.EmitThinkingAsync(roomId, "Compiling and running NUnit test suite via MCP...");
             await Task.Delay(2000);
-            await Agent.EmitMessageAsync(roomId, "Test Results:\n✅ All Tests Passed (Simulated)\n🏁 WORKFLOW_COMPLETE");
+            
+            // --- NEW: Call MCP Tool ---
+            await Agent.CallToolAsync(roomId, "test_runner", "run_tests", new { test_suite = "DemoTests" });
+            
+            await Agent.ReleaseTurnAsync(roomId); // Explicit release
         }
         catch (Exception ex)
         {
@@ -390,16 +514,32 @@
     .log-header h3 { margin: 0; font-size: 1.1rem; }
 
     .copy-btn {
-        background: #21262d;
+        background: #21262d; /* Dark neutral base */
         border: 1px solid #30363d;
         color: #c9d1d9;
-        padding: 0.4rem 0.8rem;
-        border-radius: 6px;
-        font-size: 0.8rem;
+        padding: 0.3rem 0.8rem;
+        border-radius: 6px; /* Aspire/GitHub style square-ish corners */
+        font-weight: 500;
+        font-size: 0.85rem;
         cursor: pointer;
-        transition: 0.2s;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 100px; /* Ensure consistent width */
+        justify-content: center;
+        width: 100px;    
     }
-    .copy-btn:hover { background: #30363d; color: #58a6ff; }
+    .copy-btn:hover { 
+        background: #30363d;
+        color: white;
+        border-color: #8b949e;
+    }
+    .copy-btn.success {
+        background: #238636;
+        color: white;
+        border-color: #2ea043;
+    }
 
     .log-entries {
         max-height: 400px;

@@ -31,7 +31,9 @@ jobs:
       run: dotnet pack src/AgentR.Shared/AgentR.Shared.csproj --configuration Release --output ./nupkgs
 
     - name: Pack Worker Template
-      run: dotnet pack templates/AgentR.Worker/AgentRWorker.csproj --configuration Release --output ./nupkgs
+      run: |
+        dotnet nuget add source $(pwd)/nupkgs -n local-temp
+        dotnet pack templates/AgentR.Worker/AgentRWorker.csproj --configuration Release --output ./nupkgs
 
     - name: Push to NuGet
       run: dotnet nuget push ./nupkgs/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate

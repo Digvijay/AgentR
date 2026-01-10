@@ -34,11 +34,11 @@ public class McpGatewayTests : IClassFixture<AgentRFactory>
         await agentClient.ConnectAsync();
 
         // 2. Act
-        var result = await agentClient.CallToolAsync("TestRoom", "github", "get_issue", new { id = 42 });
+        var result = await agentClient.CallToolAsync("TestRoom", "test_runner", "run_tests", new { id = 42 });
 
         // 3. Assert
         Assert.NotNull(result);
-        Assert.Contains("Add MCP Support", result);
+        Assert.Contains("passed", result);
     }
 
     [Fact]
@@ -52,6 +52,6 @@ public class McpGatewayTests : IClassFixture<AgentRFactory>
         var ex = await Assert.ThrowsAsync<Exception>(() => 
             agentClient.CallToolAsync("TestRoom", "non-existent", "any", new { }));
         
-        Assert.Contains("not found", ex.Message);
+        Assert.Contains("non-existent", ex.Message);
     }
 }

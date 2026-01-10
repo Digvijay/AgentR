@@ -12,11 +12,10 @@ public class BudgetFilter : IHubFilter
     private readonly IBudgetService _budgetService;
 
     // Pricing Model: Configurable in a production scenario
-    private const long CostPerTurn = 50;
+    private const long CostPerTurn = 5;
     private const long CostPerToken = 1;
 
     private readonly IHubContext<AgentHub, IAgentClient> _hubContext;
-
     public BudgetFilter(IBudgetService budgetService, IHubContext<AgentHub, IAgentClient> hubContext)
     {
         _budgetService = budgetService;
@@ -56,8 +55,8 @@ public class BudgetFilter : IHubFilter
         // 2. Enforce logic if we have a chargeable action
         if (!string.IsNullOrEmpty(roomId) && cost > 0)
         {
-            // A. Check for sufficient funds BEFORE execution
-            if (!await _budgetService.HasFundsAsync(roomId, cost))
+            // A. Check for sufficient funds BEFORE execution (Optional Enforcement)
+            if (_budgetService.IsEnforcementEnabled && !await _budgetService.HasFundsAsync(roomId, cost))
             {
                 // REJECTION: This travels back to the Client SDK as a HubException.
                 // We use the 402 code in the message for semantic clarity.

@@ -59,7 +59,7 @@
     private bool isPlaying = false;
     private bool isLoggingIn = false;
 
-    private async Task LoadPasted()
+    private void LoadPasted()
     {
         if (string.IsNullOrWhiteSpace(pastedJson)) return;
         try
@@ -76,7 +76,7 @@
         }
     }
 
-    private async Task LoadSample()
+    private void LoadSample()
     {
         pastedJson = @"
 [
@@ -87,7 +87,7 @@
   { ""AgentId"": ""tester"", ""Content"": ""Compiling and running NUnit test suite..."", ""EventType"": ""Thinking"", ""Timestamp"": ""2023-11-14T22:13:28.000+00:00"" },
   { ""AgentId"": ""tester"", ""Content"": ""Test Results:\n✅ Passes (3/3)\n🏁 WORKFLOW_COMPLETE"", ""EventType"": ""MessageFrame"", ""Timestamp"": ""2023-11-14T22:13:30.000+00:00"" }
 ]";
-        await LoadPasted();
+        LoadPasted();
     }
 
     private void HandleKeyUp(KeyboardEventArgs e)

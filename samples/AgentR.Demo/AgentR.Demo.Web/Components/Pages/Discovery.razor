@@ -70,6 +70,10 @@
                 <span class="icon">🌌</span>
                 <h2>No Active Signals Detected</h2>
                 <p>The cluster is quiet. Start an agent workflow to generate traffic.</p>
+                <div class="keda-tip">
+                    <span class="icon">⚡</span>
+                    <small><strong>KEDA Insight:</strong> With 0 active rooms, the worker deployment would auto-scale to 0 replicas to save costs.</small>
+                </div>
                 <a href="/code-review-demo" class="cta-btn">🚀 Launch Code Review Demo</a>
             </div>
         }
@@ -344,6 +348,8 @@
     .empty-state .icon { font-size: 4rem; display: block; margin-bottom: 1rem; }
     .empty-state h2 { color: #f0f6fc; margin-bottom: 0.5rem; }
     .empty-state p { color: #8b949e; margin-bottom: 2rem; }
+    .keda-tip { background: rgba(56, 139, 253, 0.15); color: #58a6ff; padding: 0.5rem; border-radius: 6px; margin-bottom: 1.5rem; display: inline-block; }
+    .keda-tip .icon { margin-right: 5px; }
     .cta-btn {
         background: #58a6ff;
         color: #0d1117;

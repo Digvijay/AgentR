@@ -14,10 +14,13 @@ public class RedisBudgetService : IBudgetService
     // Initial grant for new rooms (FinOps "Starter Pack")
     private const long InitialGrant = 1000; 
 
-    public RedisBudgetService(IConnectionMultiplexer redis)
+    public RedisBudgetService(IConnectionMultiplexer redis, IConfiguration configuration)
     {
         _db = redis.GetDatabase();
+        IsEnforcementEnabled = configuration.GetValue<bool>("AgentR:EnableBudgets");
     }
+
+    public bool IsEnforcementEnabled { get; set; }
 
     private string GetKey(string roomId) => $"agentr:wallet:{roomId}";
 

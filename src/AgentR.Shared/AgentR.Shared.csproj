@@ -6,9 +6,7 @@
     <Nullable>enable</Nullable>
 
     <PackageId>AgentR.Shared</PackageId>
-    <Version>1.1.0</Version>
-    <Authors>Digvijay</Authors>
-    <Company>AgentR Corp</Company>
+    <PackageId>AgentR.Shared</PackageId>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>NuGetREADME.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/Digvijay/AgentR</PackageProjectUrl>
@@ -26,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MessagePack" Version="3.1.4" />
+    <PackageReference Include="MessagePack" />
   </ItemGroup>
 
 </Project>

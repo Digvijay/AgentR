@@ -16,6 +16,12 @@ using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.AddServiceDefaults(); // Enable OpenTelemetry, HealthChecks, etc.
+
+builder.Services.AddOpenTelemetry()
+   .WithMetrics(metrics => metrics.AddMeter("AgentR.Server")); // Listen for custom metrics
+
+
 // 1. Connect to Redis (Using connection string from config for Aspire compatibility)
 var redisConnectionString = builder.Configuration.GetConnectionString("redis") ?? "localhost:6379,abortConnect=false";
 var redisConn = ConnectionMultiplexer.Connect(redisConnectionString);
@@ -113,6 +119,8 @@ if (!disableAuth)
     app.UseAuthentication(); // <--- NEW: Must be before Authorization
     app.UseAuthorization();  // <--- NEW
 }
+
+app.MapDefaultEndpoints(); // Health checks, etc.
 
 app.MapHub<AgentHub>("/agentHub");
 

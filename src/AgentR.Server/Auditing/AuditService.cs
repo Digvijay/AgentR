@@ -36,34 +36,72 @@ public class AuditService : BackgroundService
         var batch = new List<AuditRecord>(100);
         var lastFlush = DateTime.UtcNow;
 
-        try
+        // "Immortal" Loop
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await foreach (var record in _buffer.ReadAllAsync(stoppingToken))
+            try
             {
-                batch.Add(record);
-
-                if (batch.Count >= 100 || (DateTime.UtcNow - lastFlush).TotalSeconds >= 5)
+                // We restart reading from the buffer where we left off (it's a channel)
+                await foreach (var record in _buffer.ReadAllAsync(stoppingToken))
                 {
-                    await FlushBatchAsync(batch, stoppingToken);
-                    lastFlush = DateTime.UtcNow;
+                    batch.Add(record);
+
+                    if (batch.Count >= 100 || (DateTime.UtcNow - lastFlush).TotalSeconds >= 5)
+                    {
+                        if (await TryFlushBatchAsync(batch, stoppingToken))
+                        {
+                            lastFlush = DateTime.UtcNow;
+                        }
+                        // If flush failed, we keep the items in 'batch' and try again next loop/item
+                        // We continue reading to avoid blocking the channel if possible, 
+                        // OR we could break inner loop to force a retry delay. 
+                        // For safety, let's just keep accumulating until specific limits or retry works.
+                        // Ideally, if storage is down, we might eventually OOM if we don't drop.
+                        // Simple policy: If flush failed, just carry over.
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Critical error in AuditService loop! Restarting in 5s...");
+                try 
+                {
+                    await Task.Delay(5000, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
                 }
             }
         }
-        catch (OperationCanceledException)
+
+        // Final shutdown flush attempt
+        if (batch.Count > 0)
         {
-            // Normal shutdown
+            await TryFlushBatchAsync(batch, CancellationToken.None);
+        }
+    }
+
+    private async Task<bool> TryFlushBatchAsync(List<AuditRecord> batch, CancellationToken ct)
+    {
+        if (batch.Count == 0) return true;
+
+        try
+        {
+            var fileName = $"log_{DateTime.UtcNow:yyyy-MM-dd}.jsonl";
+            await _storage.AppendRecordsAsync(fileName, batch, ct);
+            batch.Clear(); // Only clear on success
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Critical error in AuditService loop!");
-        }
-        finally
-        {
-            // Final flush
-            if (batch.Count > 0)
-            {
-                await FlushBatchAsync(batch, CancellationToken.None);
-            }
+            _logger.LogError(ex, "Failed to flush audit logs! Retaining {Count} records for retry.", batch.Count);
+            return false;
         }
     }
 

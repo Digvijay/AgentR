@@ -21,6 +21,11 @@ public interface IBudgetService
     Task TopUpAsync(string roomId, long amount, CancellationToken ct = default);
 
     /// <summary>
+    /// Gets or sets whether budget enforcement is active.
+    /// </summary>
+    bool IsEnforcementEnabled { get; set; }
+
+    /// <summary>
     /// Retrieves the current balance for a room.
     /// </summary>
     Task<long> GetBalanceAsync(string roomId, CancellationToken ct = default);

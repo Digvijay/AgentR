@@ -1,8 +1,8 @@
-# 🚀 KEDA Autoscaling (Scale-to-Zero)
+# KEDA Autoscaling (Scale-to-Zero)
 
 This document outlines the technical implementation of the **Lobby Pattern** in AgentR, which enables event-driven autoscaling of agent containers to zero when idle.
 
-## 🏗️ Architecture
+## Architecture
 
 AgentR uses a high-performance Redis-backed "Lobby" to orchestrate just-in-time agent provisioning.
 
@@ -25,7 +25,7 @@ Instead of agents being "Always-On", they are requested on-demand:
 - **KEDA (Scaler)**: A Kubernetes ScaledObject monitors the length of this list.
 - **Worker (Consumer)**: Once KEDA spins up a pod, the worker uses `WorkerBackgroundService` to perform a blocking `BLPOP` on the Redis list, retrieves the ticket, and joins the room via SignalR.
 
-## 🛠️ Implementation Details
+## Implementation Details
 
 ### Shared Protocol (`AgentR.Shared`)
 The `AgentTicket` record defines the contract for work assignments:
@@ -54,7 +54,7 @@ The worker is refactored from a long-running process to a task-oriented backgrou
 - **Idle**: 0 pods running (Cost = $0).
 - **Active**: Worker connects, performs `InvokeWithNetworkStreamingAsync`, releases the turn, leaves the room, and disconnects.
 
-## 🚀 Deployment (Kubernetes + KEDA)
+## Deployment (Kubernetes + KEDA)
 
 View the full manifest in `k8s/agentr-keda.yaml`.
 
@@ -72,6 +72,6 @@ spec:
       listLength: "1"
 ```
 
-## ✅ Verification Results
+## How it was tested
 - **End-to-End Flow**: Successfully local-simulated "Lobby -> Wake up -> SignalR Join -> Turn Acquisition".
 - **Resilience**: Verified that accidental disconnects during a KEDA session automatically release the distributed turn lock.

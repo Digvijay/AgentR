@@ -43,9 +43,9 @@ public class CodeTesterWorker : BackgroundService
         {
             if (frame is MessageFrame msg)
             {
-                if (msg.Content.StartsWith("TEST_REQUEST:"))
+                if (msg.Content.StartsWith("TEST_REQUEST:") || msg.Content.StartsWith("TEST_REQUEST_WITH_CONFIG|"))
                 {
-                    _pendingCode = msg.Content.Replace("TEST_REQUEST:", "").Trim();
+                    _pendingCode = msg.Content;
                     _logger.LogInformation("CodeTester queued testing, requesting turn...");
                     try
                     {
@@ -86,8 +86,49 @@ public class CodeTesterWorker : BackgroundService
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
-    private async Task HandleTestInternalAsync(string code, CancellationToken ct)
+    private class LlmConfig { public string endpoint { get; set; } public string key { get; set; } public string model { get; set; } }
+
+    private async Task HandleTestInternalAsync(string rawMessage, CancellationToken ct)
     {
+        string code = rawMessage;
+        string? configJson = null;
+        Kernel kernelToUse = _kernel;
+
+        if (rawMessage.StartsWith("TEST_REQUEST_WITH_CONFIG|"))
+        {
+            try 
+            {
+                var parts = rawMessage.Split('|', 3);
+                if (parts.Length == 3)
+                {
+                    var json = parts[1];
+                    configJson = json;
+                    code = parts[2];
+                    var config = System.Text.Json.JsonSerializer.Deserialize<LlmConfig>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    
+                    if (config != null)
+                    {
+                        var builder = Kernel.CreateBuilder();
+                        builder.AddOpenAIChatCompletion(
+                            modelId: config.model,
+                            apiKey: config.key,
+                            httpClient: new HttpClient { BaseAddress = new Uri(config.endpoint) }
+                        );
+                        kernelToUse = builder.Build();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse dynamic config in Tester");
+                await _client.EmitMessageAsync(_roomId, $"[System] ⚠️ Config Parse Error: {ex.Message}", ct);
+            }
+        }
+        else if (rawMessage.StartsWith("TEST_REQUEST:"))
+        {
+            code = rawMessage.Replace("TEST_REQUEST:", "").Trim();
+        }
+
         try
         {
             _logger.LogInformation("CodeTester running tests...");
@@ -113,7 +154,7 @@ Provide:
 
 Format as a test report.";
 
-                var response = await _kernel.InvokePromptAsync(prompt);
+                var response = await kernelToUse.InvokePromptAsync(prompt);
                 testReport = response.ToString();
             }
             catch (Exception llmEx)
@@ -158,7 +199,28 @@ Format as a test report.";
             }
 
             await _client.EmitMessageAsync(_roomId, $"[CodeTester] Test Results:\n{testReport}", ct);
-            await _client.EmitMessageAsync(_roomId, "[CodeTester] WORKFLOW_COMPLETE - All agents finished!", ct);
+
+            // Check for failure (naive check for 'FAIL' but ensuring it's not 'Failed: 0')
+            bool hasFailures = testReport.ToUpper().Contains("FAIL") && !testReport.Contains("Failed: 0");
+
+            if (hasFailures)
+            {
+                await _client.EmitMessageAsync(_roomId, "[CodeTester] Tests failed. Sending back to Writer for fixes...", ct);
+                var fixTask = $"The following tests failed. Fix the code to pass them:\n\nTest Report:\n{testReport}\n\nOriginal Code:\n{code}";
+
+                if (configJson != null)
+                {
+                    await _client.EmitMessageAsync(_roomId, $"TASK_WITH_CONFIG|{configJson}|{fixTask}", ct);
+                }
+                else
+                {
+                    await _client.EmitMessageAsync(_roomId, $"TASK: {fixTask}", ct);
+                }
+            }
+            else
+            {
+                await _client.EmitMessageAsync(_roomId, "[CodeTester] WORKFLOW_COMPLETE - All agents finished!", ct);
+            }
             
             _logger.LogInformation("CodeTester completed testing");
         }

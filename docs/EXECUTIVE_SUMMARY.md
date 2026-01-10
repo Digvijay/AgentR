@@ -1,7 +1,5 @@
 # AgentR: Executive Summary
 
-![AgentR Executive Banner](./images/banner_executive.png)
-
 **Product:** Distributed AI Agent Orchestration Platform
 **Target:** Enterprise AI Infrastructure
 **Value Proposition:** Security, Cost Control, and Reliability for Autonomous Agents.
@@ -50,3 +48,5 @@ AgentR is the "Traffic Control" system for your AI workforce. It provides the mi
 ## 5. Conclusion
 
 AgentR transforms AI Agents from "unpredictable scripts" into "managed employees." It provides the necessary controls to deploy multi-agent systems with confidence, ensuring they remain safe, cost-effective, and obedient to human command.
+
+![AgentR Executive Banner](./images/banner_executive.png)

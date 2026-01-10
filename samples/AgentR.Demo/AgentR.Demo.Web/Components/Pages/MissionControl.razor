@@ -12,6 +12,9 @@
     <div class="mc-header">
         <h1>🛡️ Strategic Operations Center</h1>
         <p>Real-time Governance, FinOps, and Connectivity Layer.</p>
+        <div class="keda-badge">
+            ⚡ <strong>KEDA Trigger:</strong> Scaling enabled when Pending Tickets > 0 or Active Rooms > 2
+        </div>
     </div>
 
     <div class="mc-grid">
@@ -20,6 +23,15 @@
             <div class="card-header">
                 <span class="bi bi-cash-coin"></span> 
                 <h2>FinOps Budget Controller</h2>
+                <div class="toggle-container">
+                    <label class="switch">
+                        <input type="checkbox" @bind="isBudgetEnabled" @onclick="ToggleBudget">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="badgex @(isBudgetEnabled ? "on" : "off")">
+                        @(isBudgetEnabled ? "ACTIVE" : "BYPASS")
+                    </span>
+                </div>
             </div>
             
             <div class="gauge-container">
@@ -102,6 +114,7 @@
 @code {
     private long balance = 0;
     private int activeStep = 0;
+    private bool isBudgetEnabled = false;
     private List<string> budgetLogs = new();
     private List<string> gatewayLogs = new();
     private string roomId = "code-review-demo-room";
@@ -129,6 +142,15 @@
                     await UpdateBalance();
                 }
                 else if (frame is ToolResponseFrame resp) {
+                    if (resp.SenderId == "GATEWAY" && resp.Success)
+                    {
+                         // Just log the success in the gateway log
+                    }
+                    else if (resp.SenderId == "GATEWAY" && !resp.Success)
+                    {
+                         // Log failure
+                    }
+                    
                     gatewayLogs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] ✅ Tool Result: Success={resp.Success}");
                     await UpdateBalance();
                 }
@@ -143,6 +165,7 @@
         await Agent.ConnectAsync();
         await Agent.JoinRoomAsync(roomId);
         await UpdateBalance();
+        isBudgetEnabled = await Agent.GetBudgetStatusAsync();
         gatewayLogs.Insert(0, "System Ready. Connectivity layer active.");
         budgetLogs.Insert(0, "Budget Controller active. Room credits synced.");
     }
@@ -158,6 +181,18 @@
         await Agent.TopUpAsync(roomId, 500);
         await UpdateBalance();
     }
+
+    private async Task ToggleBudget()
+    {
+        // Toggle is bound to isBudgetEnabled, but click happens before bind update in some cases,
+        // so we negate current value to find target state, or rely on double-binding.
+        // Safer to just flip it and send.
+        isBudgetEnabled = !isBudgetEnabled; 
+        await Agent.SetBudgetStatusAsync(isBudgetEnabled);
+    }
+    
+    // In OnInitializedAsync, add:
+    // isBudgetEnabled = await Agent.GetBudgetStatusAsync();
 
     private async Task SimulateToolCall()
     {
@@ -188,7 +223,8 @@
 
     .mc-header { text-align: center; margin-bottom: 3rem; }
     .mc-header h1 { font-size: 2.5rem; font-weight: 800; color: #58a6ff; margin-bottom: 0.5rem; }
-    .mc-header p { color: #8b949e; font-size: 1.1rem; }
+    .mc-header p { color: #8b949e; font-size: 1.1rem; margin-bottom: 1rem; }
+    .keda-badge { display: inline-block; background: #1f2428; border: 1px solid #30363d; padding: 0.4rem 1rem; border-radius: 20px; color: #d29922; font-size: 0.9rem; }
 
     .mc-grid {
         display: grid;
@@ -255,4 +291,17 @@
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
+
+    /* TOGGLE SWITCH */
+    .toggle-container { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #30363d; transition: .4s; border-radius: 20px; }
+    .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: #238636; }
+    input:checked + .slider:before { transform: translateX(20px); }
+
+    .badgex { font-size: 0.7rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; border: 1px solid transparent; }
+    .badgex.on { background: rgba(35, 134, 54, 0.2); color: #3fb950; border-color: rgba(35, 134, 54, 0.4); }
+    .badgex.off { background: rgba(139, 148, 158, 0.2); color: #8b949e; border-color: #30363d; }
 </style>

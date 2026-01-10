@@ -8,13 +8,13 @@
     <!-- Template Metadata -->
     <PackageId>AgentR.Templates.Worker.Advanced</PackageId>
     <Title>AgentR Advanced Worker</Title>
-    <Authors>Digvijay</Authors>
+    <Authors>Digvijay Chauhan</Authors>
     <Description>Production-ready AgentR worker with DI, Logging, KEDA support, and FinOps integration.</Description>
     <PackageTags>agentr;ai;worker;advanced;enterprise</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AgentR.Client" Version="1.1.0" />
+    <PackageReference Include="AgentR.Client" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.0.0" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.0" />

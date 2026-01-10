@@ -24,6 +24,8 @@ Intercepts `Broadcast` and `RequestTurn` calls to automatically capture the cont
 - **Batching**: Reduces disk/network IO by grouping records.
 - **Periodic Flushing**: Ensures data is persisted even during low-traffic periods.
 - **Non-blocking**: The "Fast Path" (SignalR) never waits for the "Slow Path" (Disk/Cloud).
+- **Immortal Loop**: The `AuditService` catches unhandled exceptions and restarts its loop (with backoff), ensuring auditing never silently dies.
+- **Resilient Flush**: Failed batches are retained in memory and retried, preventing data loss during transient storage outages.
 
 ## Configuration
 To enable Azure Blob Storage, add the following to your `ConnectionStrings`:

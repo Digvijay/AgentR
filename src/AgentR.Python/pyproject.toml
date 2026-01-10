@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentr"
-version = "1.1.0"
+version = "1.0.0"
 authors = [
-  { name="Digvijay", email="digvijay@live.com" },
+  { name="Digvijay Chauhan", email="digvijay@live.com" },
 ]
 description = "Professional Real-time Transport Protocol for Distributed AI Agents."
 readme = "README.md"

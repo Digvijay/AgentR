@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/aspire-8.0.json",
+  "resources": {
+    "agentr-redis": {
+      "type": "container.v0",
+      "connectionString": "{agentr-redis.bindings.tcp.host}:{agentr-redis.bindings.tcp.port}",
+      "image": "docker.io/library/redis:7.4",
+      "bindings": {
+        "tcp": {
+          "scheme": "tcp",
+          "protocol": "tcp",
+          "transport": "tcp",
+          "targetPort": 6379
+        }
+      }
+    },
+    "agentr-server": {
+      "type": "project.v0",
+      "path": "../AgentR.Server/AgentR.Server.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{agentr-server.bindings.http.targetPort}",
+        "ConnectionStrings__agentr-redis": "{agentr-redis.connectionString}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http",
+          "external": true
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http",
+          "external": true
+        }
+      }
+    },
+    "agentr-worker": {
+      "type": "project.v0",
+      "path": "../AgentR.Worker/AgentR.Worker.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "services__agentr-server__http__0": "{agentr-server.bindings.http.url}",
+        "services__agentr-server__https__0": "{agentr-server.bindings.https.url}",
+        "OPENAI_API_KEY": "ollama",
+        "HubUrl": "{agentr-server.bindings.http.url}"
+      }
+    }
+  }
+}

@@ -1,8 +1,7 @@
 # AgentR: Technical Architecture Summary
 
-![AgentR Technical Banner](../docs/images/banner_technical.png)
 
-**Version:** 1.1.0
+**Version:** 1.0.0
 **Stack:** .NET 9, SignalR, Redis, KEDA, MessagePack
 **License:** MIT
 
@@ -63,11 +62,12 @@ AgentR introduces an `IHubFilter` pipeline for agent communications:
 
 ### 3.4 Secure Tool Connectivity (MCP Gateway)
 
-AgentR acts as the **Secure Transport Layer** for Anthropic's Model Context Protocol.
+AgentR implements a **native, process-based client** for Anthropic's Model Context Protocol.
 
-*   **Secret Management:** API keys (GitHub, SQL, Slack) are stored exclusively on the AgentR Hub.
-*   **RPC Routing:** Agents request tool execution via `InvokeTool`. The Hub validates the request (Budget/Safety), executes the tool in its secure environment, and relays the result.
-*   **Security:** This prevents sensitive infrastructure credentials from ever being transmitted to LLM providers or untrusted agent containers.
+*   **Dynamic Configuration:** Servers are defined in a standard `mcp.json` file, easing integration with existing MCP ecosystems.
+*   **Infrastructure-as-Code:** Tool definitions and commands are version-controlled alongside the application.
+*   **RPC Routing:** Agents request tool execution via `InvokeTool`. The Hub validates the request, spins up the configured process (if needed), executes the tool via standard input/output (Stdio), and relays the result.
+*   **Security:** This keeps API keys centralized on the Hub and prevents sensitive credentials from leaking to agent environments.
 
 ## 4. FinOps & Quota Management
 
@@ -76,7 +76,7 @@ AgentR introduces a "Toll Booth" model to prevent the "Intern runaway loop" scen
 *   **Mechanism:** Every Room has a "Wallet" stored in Redis. The Hub intercepts every `RequestTurn` and `Broadcast` call.
 *   **Atomic Costing:** Uses Redis `DECR` and `INCR` to ensure thread-safe balance management across multi-node Hub deployments.
 *   **Kill Switch:** If a room's balance is insufficient, the Hub rejects the call with a `402 Payment Required` HubException, instantly stopping the agent's logic flow.
-*   **Pricing Model:** 50 credits per Turn, 1 credit per Thought/Message Frame.
+*   **Pricing Model:** 5 credits per Turn, 1 credit per Thought/Message Frame.
 
 ## 5. KEDA Autoscaling (The "Lobby Pattern")
 
@@ -116,3 +116,5 @@ To maintain high velocity and reliable test results, the automated Integration T
 2.  **Safety & Governance**: `SafetyTests` and `BudgetTests` specifically target the interceptor pipeline for content and financial enforcement.
 3.  **Cross-Platform Fidelity**: The **Data Plane** (MessagePack binary serialization) is validated through cross-platform E2E tests between the .NET reference worker and the Python client, ensuring that polymorphic frames are correctly tagged and parsed across different memory layouts.
 4.  **Resiliency**: Stress tests for "Zombie Processes" (Watchdog) and hard socket disconnects.
+
+![AgentR Technical Banner](../docs/images/banner_technical.png)

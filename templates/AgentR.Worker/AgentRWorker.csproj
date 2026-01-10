@@ -9,7 +9,7 @@
     <PackageType>Template</PackageType>
     <PackageId>AgentR.Templates.Worker</PackageId>
     <Title>AgentR Worker Template</Title>
-    <Authors>Digvijay</Authors>
+    <Authors>Digvijay Chauhan</Authors>
     <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/Digvijay/AgentR</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Digvijay/AgentR</RepositoryUrl>
@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AgentR.Client" Version="1.1.0" />
+    <PackageReference Include="AgentR.Client" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.0" />
 <!--#if (UseSemanticKernel) -->

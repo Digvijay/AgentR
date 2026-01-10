@@ -23,6 +23,20 @@ sequenceDiagram
     Hub->>MCP: Execute Tool with Secure Key
     MCP-->>Hub: JSON Result
     Hub->>Agent: ToolResponseFrame(Success=true, Data=...)
+    Hub->>Agent: ToolResponseFrame(Success=true, Data=...)
+```
+
+### Configuration (mcp.json)
+Servers are defined in a standard `mcp.json` file in the server root:
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"]
+    }
+  }
+}
 ```
 
 ## 3. Key Benefits
