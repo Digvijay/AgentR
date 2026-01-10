@@ -3,7 +3,7 @@
         "test_runner": {
             "command": "/bin/bash",
             "args": [
-                "/Users/digvijay/source/github/AgentR/mock_mcp.sh"
+                "mock_mcp.sh"
             ]
         },
         "github": {
