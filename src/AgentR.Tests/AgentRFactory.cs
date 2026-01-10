@@ -27,14 +27,25 @@ public class AgentRFactory : WebApplicationFactory<Program>, IAsyncLifetime
         .WithImage("redis:latest")
         .Build();
 
+    private string? _externalRedis;
+
     public async Task InitializeAsync()
     {
-        await _redisContainer.StartAsync();
+        _externalRedis = Environment.GetEnvironmentVariable("REDIS_CONNECTION");
+        
+        if (string.IsNullOrEmpty(_externalRedis))
+        {
+            await _redisContainer.StartAsync();
+        }
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseSetting("ConnectionStrings:redis", _redisContainer.GetConnectionString());
+        var connString = !string.IsNullOrEmpty(_externalRedis) 
+            ? _externalRedis 
+            : _redisContainer.GetConnectionString();
+
+        builder.UseSetting("ConnectionStrings:redis", connString);
         builder.UseSetting("AgentR:EnableBudgets", "true");
 
         builder.ConfigureLogging(logging => 
