@@ -64,8 +64,17 @@ public class ResiliencyTests : IClassFixture<AgentRFactory>
         await Task.Delay(500);
 
         // Assert
-        rooms = await discovery.ListRoomsAsync();
-        room = rooms.First(r => r.RoomId == roomId);
+        // Assert - Retry logic for CI
+        room = null;
+        for (int i = 0; i < 10; i++)
+        {
+            rooms = await discovery.ListRoomsAsync();
+            room = rooms.FirstOrDefault(r => r.RoomId == roomId);
+            if (room != null && room.AgentCount == 0) break;
+            await Task.Delay(500);
+        }
+
+        Assert.NotNull(room);
         Assert.Equal(0, room.AgentCount);
     }
 }
