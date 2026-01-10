@@ -44,6 +44,7 @@ jobs:
         
         # 2. Scaffold a project
         mkdir smoke-test
+        echo '<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>' > smoke-test/Directory.Packages.props
         dotnet new agentr-worker -n SmokeAgent -o smoke-test/SmokeAgent
         
         # 3. Build the scaffolded project
