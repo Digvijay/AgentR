@@ -1,11 +1,5 @@
 {
     "mcpServers": {
-        "test_runner": {
-            "command": "/bin/bash",
-            "args": [
-                "mock_mcp.sh"
-            ]
-        },
         "github": {
             "command": "echo",
             "args": [
