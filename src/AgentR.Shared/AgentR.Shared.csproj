@@ -6,13 +6,11 @@
     <Nullable>enable</Nullable>
 
     <PackageId>AgentR.Shared</PackageId>
-    <Version>1.0.0</Version>
-    <Authors>Digvijay</Authors>
-    <Company>AgentR Corp</Company>
+    <PackageId>AgentR.Shared</PackageId>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>NuGetREADME.md</PackageReadmeFile>
-    <PackageProjectUrl>https://github.com/digvijay/AgentR</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/digvijay/AgentR</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Digvijay/AgentR</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Digvijay/AgentR</RepositoryUrl>
     <Description>Shared protocol definitions and frame structures for the AgentR Real-time Transport Protocol.</Description>
     <PackageTags>ai;agents;signalr;protocol;messagepack</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -26,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MessagePack" Version="3.1.4" />
+    <PackageReference Include="MessagePack" />
   </ItemGroup>
 
 </Project>

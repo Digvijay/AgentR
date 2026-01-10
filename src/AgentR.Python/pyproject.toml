@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "agentr"
 version = "1.0.0"
 authors = [
-  { name="Digvijay", email="digvijay@example.com" },
+  { name="Digvijay Chauhan", email="digvijay@live.com" },
 ]
 description = "Professional Real-time Transport Protocol for Distributed AI Agents."
 readme = "README.md"
@@ -19,11 +19,19 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    "signalrcore1>=1.1.7",
-    "msgpack>=1.0.8",
-    "pyjwt>=2.10.1",
+    "signalrcore",
+    "pyjwt",
+    "msgpack",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-mock",
+    "pytest-asyncio"
 ]
 
 [project.urls]
-Homepage = "https://github.com/digvijay/AgentR"
-Issues = "https://github.com/digvijay/AgentR/issues"
+Repository = "https://github.com/Digvijay/AgentR"
+Documentation = "https://github.com/Digvijay/AgentR/tree/main/docs"
+Issues = "https://github.com/Digvijay/AgentR/issues"

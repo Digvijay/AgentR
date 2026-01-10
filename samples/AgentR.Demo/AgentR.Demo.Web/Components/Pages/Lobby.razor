@@ -1,0 +1,186 @@
+@page "/lobby"
+@using AgentR.Client
+@using AgentR.Shared
+@inject AgentClient Agent
+@rendermode InteractiveServer
+
+<PageTitle>AgentR | Agent Lobby</PageTitle>
+
+<div class="lobby-container">
+    <div class="glass-card">
+        <h1>🚀 Agent Summoning Chamber</h1>
+        <p class="subtitle">Experience the KEDA <b>Scale-to-Zero</b> Lobby Pattern.</p>
+
+        <div class="status-panel">
+            <div class="status-item @(isQueued ? "active" : "")">
+                <span class="dot"></span>
+                <span>Ticket Queued (Redis)</span>
+            </div>
+            <div class="status-item @(isWaking ? "active" : "")">
+                <span class="dot spinning"></span>
+                <span>Container Waking Up</span>
+            </div>
+            <div class="status-item @(isJoined ? "active" : "")">
+                <span class="dot"></span>
+                <span>Agent Connected</span>
+            </div>
+        </div>
+
+        <div class="action-area">
+            <button class="summon-btn @(isBusy ? "loading" : "")" @onclick="SummonAgent" disabled="@isBusy">
+                @(isBusy ? "⚡ POWERING ON..." : "召唤 SUMMON DOTNET AGENT")
+            </button>
+        </div>
+
+        <div class="log-container">
+            <h3>Event Horizon</h3>
+            <div class="log-entries">
+                @foreach (var entry in logs)
+                {
+                    <div class="log-entry @entry.Type.ToLower()">
+                        <span class="time">@entry.Timestamp.ToString("HH:mm:ss")</span>
+                        <span class="msg">@entry.Message</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isQueued = false;
+    private bool isWaking = false;
+    private bool isJoined = false;
+    private bool isBusy = false;
+    private List<LogEntry> logs = new();
+    private string roomId = "lobby-demo-room";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Agent.OnSignalReceived += frame =>
+        {
+            if (frame is MessageFrame m)
+            {
+                if (m.Content.Contains("Ticket queued"))
+                {
+                    AddLog("info", "🎟️ Ticket pushed to Redis list. KEDA is observing...");
+                    isQueued = true;
+                    StateHasChanged();
+                }
+                else if (m.Content.Contains("Waking up"))
+                {
+                    AddLog("warning", "⚡ KEDA Triggered! Container is spinning up...");
+                    isWaking = true;
+                    StateHasChanged();
+                }
+                else if (m.Content.Contains("Greetings"))
+                {
+                    AddLog("success", "🤖 Agent joined! SignalR connection established.");
+                    isJoined = true;
+                    isBusy = false;
+                    StateHasChanged();
+                }
+                else 
+                {
+                    AddLog("agent", $"🤖 {m.SenderId}: {m.Content}");
+                }
+            }
+        };
+
+        await Agent.ConnectAsync();
+        await Agent.JoinRoomAsync(roomId);
+        AddLog("system", "Connected to AgentR Hub. Ready for summoning.");
+    }
+
+    private async Task SummonAgent()
+    {
+        isBusy = true;
+        isQueued = isWaking = isJoined = false;
+        AddLog("system", "Sending request to Hub...");
+        await Agent.RequestAgentAsync("dotnet");
+    }
+
+    private void AddLog(string type, string msg)
+    {
+        logs.Insert(0, new LogEntry(DateTime.Now, type, msg));
+        StateHasChanged();
+    }
+
+    record LogEntry(DateTime Timestamp, string Type, string Message);
+}
+
+<style>
+    .lobby-container {
+        display: flex;
+        justify-content: center;
+        padding: 2rem;
+        background: radial-gradient(circle at top right, #1a1a2e, #16213e);
+        min-height: 80vh;
+        color: white;
+    }
+
+    .glass-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 3rem;
+        width: 100%;
+        max-width: 800px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    h1 { color: #00d2ff; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; }
+    .subtitle { color: #ccc; margin-bottom: 2rem; }
+
+    .status-panel {
+        display: flex;
+        justify-content: space-between;
+        margin: 2rem 0;
+        padding: 1.5rem;
+        background: rgba(0,0,0,0.2);
+        border-radius: 12px;
+    }
+
+    .status-item { opacity: 0.3; transition: all 0.5s ease; display: flex; align-items: center; gap: 10px; }
+    .status-item.active { opacity: 1; color: #00d2ff; text-shadow: 0 0 10px #00d2ff; }
+
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: #00d2ff; }
+    .dot.spinning { border: 2px dashed #00d2ff; background: transparent; animation: spin 2s linear infinite; }
+
+    @@keyframes spin { 100% { transform: rotate(360deg); } }
+
+    .summon-btn {
+        width: 100%;
+        padding: 1.5rem;
+        font-size: 1.2rem;
+        font-weight: bold;
+        background: linear-gradient(45deg, #00d2ff, #3a7bd5);
+        border: none;
+        border-radius: 12px;
+        color: white;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .summon-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,210,255,0.4); }
+    .summon-btn:disabled { background: #444; cursor: not-allowed; }
+
+    .log-container { margin-top: 3rem; }
+    .log-entries { 
+        height: 250px; 
+        overflow-y: auto; 
+        background: #000; 
+        padding: 1rem; 
+        border-radius: 8px; 
+        font-family: 'Courier New', Courier, monospace;
+        border: 1px solid #333;
+    }
+
+    .log-entry { margin-bottom: 5px; font-size: 0.9rem; }
+    .log-entry.info { color: #00d2ff; }
+    .log-entry.warning { color: #ffcc00; }
+    .log-entry.success { color: #00ff00; }
+    .log-entry.agent { color: #ff00ff; border-left: 2px solid #ff00ff; padding-left: 10px; }
+    .time { color: #666; margin-right: 10px; }
+</style>

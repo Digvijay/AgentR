@@ -17,4 +17,4 @@ dotnet new install AgentR.Templates.Worker
 dotnet new agentr-worker -n MyAgent
 ```
 
-For full documentation and examples, visit the [official repository](https://github.com/digvijay/AgentR).
+For full documentation and examples, visit the [official repository](https://github.com/Digvijay/AgentR).

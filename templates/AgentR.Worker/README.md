@@ -51,7 +51,7 @@ The agent behavior is defined in the `OnTurnGranted` callback. Customize this to
 
 ## Learn More
 
-- [AgentR Documentation](https://github.com/digvijay/AgentR)
+- [AgentR Documentation](https://github.com/Digvijay/AgentR)
 - [SignalR Documentation](https://learn.microsoft.com/aspnet/core/signalr)
 <!--#if (UseSemanticKernel) -->
 - [Semantic Kernel Documentation](https://learn.microsoft.com/semantic-kernel)

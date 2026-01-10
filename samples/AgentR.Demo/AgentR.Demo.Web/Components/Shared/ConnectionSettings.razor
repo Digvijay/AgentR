@@ -1,0 +1,208 @@
+@using AgentR.Demo.Web
+@inject ConfigService Config
+@implements IDisposable
+
+<!-- Floating Toggle Button -->
+<div class="settings-toggle" @onclick="Toggle">
+    @if (Config.HasRealConfig)
+    {
+        <span class="status-icon success"></span>
+        <span>@Config.LlmModel</span>
+    }
+    else
+    {
+        <span class="status-icon warning"></span>
+        <span>Simulation Mode</span>
+    }
+    <span class="bi bi-gear-fill" style="margin-left: 8px; opacity: 0.5;"></span>
+</div>
+
+<!-- Modal Overlay -->
+@if (isOpen)
+{
+    <div class="modal-backdrop" @onclick="Close"></div>
+    <div class="settings-modal">
+        <div class="modal-header">
+            <h3>🤖 Agent Intelligence Settings</h3>
+            <button class="close-btn" @onclick="Close">×</button>
+        </div>
+        
+        <div class="modal-body">
+            <p>Configure the underlying Large Language Model (LLM) for the agents. Leave fields blank to run in <b>Simulation Mode</b> (Mock Data).</p>
+
+            <div class="form-group">
+                <label>Endpoint URL</label>
+                <div class="input-wrapper">
+                    <span class="input-icon">🌐</span>
+                    <input type="text" @bind="Config.LlmEndpoint" placeholder="https://api.openai.com/v1" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>API Key</label>
+                <div class="input-wrapper">
+                    <span class="input-icon">🔑</span>
+                    <input type="password" @bind="Config.LlmKey" placeholder="sk-..." />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Model Name</label>
+                <div class="input-wrapper">
+                    <span class="input-icon">🧠</span>
+                    <input type="text" @bind="Config.LlmModel" placeholder="gpt-4 / claude-3 / llama3" />
+                </div>
+            </div>
+            
+            <div class="actions">
+                <button class="btn-clear" @onclick="Clear">Restore Simulation (Clear)</button>
+                <button class="btn-save" @onclick="Save">Apply Settings</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isOpen = false;
+
+    protected override void OnInitialized()
+    {
+        Config.OnChanged += StateHasChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Config.LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        Config.OnChanged -= StateHasChanged;
+    }
+
+    private void Toggle() => isOpen = !isOpen;
+    private void Close() => isOpen = false;
+
+    private void Save()
+    {
+        // Properties already saved via binding setters
+        // Config.NotifyChanged(); // Setters call this
+        isOpen = false;
+    }
+
+    private void Clear()
+    {
+        // Setting properties triggers Auto-Save and NotifyChanged
+        Config.LlmEndpoint = "";
+        Config.LlmKey = "";
+        Config.LlmModel = "";
+        isOpen = false;
+    }
+}
+
+<style>
+    /* Floating Toggle in Top Right (or positioned by Layout) */
+    .settings-toggle {
+        position: fixed;
+        top: 1rem;
+        right: 1.5rem;
+        z-index: 9999; /* Ensure it's above everything */
+        background: #161b22;
+        border: 1px solid #30363d;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #e6edf3;
+        transition: 0.2s;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        pointer-events: auto; /* Force clickability */
+    }
+    .settings-toggle:hover {
+        background: #21262d;
+        transform: translateY(-1px);
+        border-color: #8b949e;
+    }
+
+    .status-icon { width: 8px; height: 8px; border-radius: 50%; }
+    .status-icon.success { background: #238636; box-shadow: 0 0 8px #238636; }
+    .status-icon.warning { background: #d29922; box-shadow: 0 0 8px #d29922; }
+
+    /* Modal Styling */
+    .modal-backdrop {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        z-index: 1000;
+        animation: fadeIn 0.2s ease-out;
+    }
+
+    .settings-modal {
+        position: fixed;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 100%;
+        max-width: 450px;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        z-index: 1001;
+        animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: hidden;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.2rem;
+        border-bottom: 1px solid #21262d;
+        background: #161b22;
+    }
+    .modal-header h3 { margin: 0; font-size: 1.1rem; color: #f0f6fc; }
+    .close-btn { background: none; border: none; color: #8b949e; font-size: 1.5rem; cursor: pointer; line-height: 1; }
+    .close-btn:hover { color: white; }
+
+    .modal-body { padding: 1.5rem; }
+    .modal-body p { margin-top: 0; color: #8b949e; font-size: 0.85rem; line-height: 1.5; margin-bottom: 1.5rem; }
+
+    .form-group { margin-bottom: 1.2rem; }
+    .form-group label { display: block; font-size: 0.75rem; color: #c9d1d9; margin-bottom: 0.5rem; font-weight: bold; }
+    
+    .input-wrapper { position: relative; }
+    .input-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0.6; }
+    
+    .form-group input { 
+        width: 100%; 
+        background: #010409; 
+        border: 1px solid #30363d; 
+        border-radius: 6px; 
+        padding: 0.7rem 0.7rem 0.7rem 2.2rem;
+        color: white; 
+        font-size: 0.9rem;
+        transition: 0.2s;
+    }
+    .form-group input:focus { outline: none; border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1); }
+
+    .actions { display: flex; gap: 1rem; margin-top: 2rem; }
+    button { flex: 1; padding: 0.8rem; border-radius: 6px; font-weight: bold; cursor: pointer; border: none; font-size: 0.9rem; transition: 0.2s; }
+    
+    .btn-save { background: #238636; color: white; }
+    .btn-save:hover { background: #2ea043; transform: translateY(-1px); }
+
+    .btn-clear { background: transparent; border: 1px solid #30363d; color: #8b949e; }
+    .btn-clear:hover { border-color: #8b949e; color: #c9d1d9; }
+
+    @@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @@keyframes slideUp { from { opacity: 0; transform: translate(-50%, -40%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+</style>

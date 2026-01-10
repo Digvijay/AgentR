@@ -19,10 +19,15 @@ AgentR is the "Traffic Control" system for your AI workforce. It provides the mi
 
 ### Key Capabilities:
 
-1. **Cost Kill-Switch:** Unlike standard API calls, AgentR allows a human or automated supervisor to instantly interrupt a running agent. This stops the billing meter immediately, preventing "runaway inference" costs.
-2. **Enterprise Governance:** Built-in "Safety Middleware" ensures that no agent can broadcast sensitive data (PII) or unsafe content to the user or other agents. It acts as a firewall for AI output.
-3. **Auditability:** Every "thought" and decision made by an agent is traced and logged via OpenTelemetry. You can visualize exactly why an agent made a decision and how long it took.
-4. **Vendor Neutrality:** Works with Azure OpenAI, local Ollama models (for privacy), and Python-based agents, preventing vendor lock-in.
+1.  **Cost Kill-Switch:** Unlike standard API calls, AgentR allows a human or automated supervisor to instantly interrupt a running agent. This stops the billing meter immediately, preventing "runaway inference" costs.
+2.  **Enterprise Governance:** Built-in "Safety Middleware" ensures that no agent can broadcast sensitive data (PII) or unsafe content to the user or other agents. It acts as a firewall for AI output.
+3.  **Auditability (Flight Recorder):** Every "thought" and decision made by an agent is traced and logged. Immutable audit trails are stored in high-performance local or cloud storage (Azure Blob).
+4.  **Scale-to-Zero (KEDA)**: Event-driven autoscaling via the Lobby pattern (Redis-backed). Infrastructure only spins up when a request is active, enabling extreme cloud-cost efficiency.
+5.  **FinOps (Budget Controller)**: Atomic credit system to prevent costly runaway agent loops.
+6.  **Immutable Log Trails**: Every frame (Thinking, Messaging, Turns) is captured and hashed.
+7.  **Session Replay:** A millisecond-accurate replay UI allows auditors to "watch the tape" of a past conversation to understand agent context and hallucinations.
+8.  **MCP Gateway**: Secure "connectivity layer" for agents to access databases and APIs without exposing infrastructure keys to model providers.
+9.  **Vendor Neutrality:** Works with Azure OpenAI, local Ollama models (for privacy), and Python-based agents, preventing vendor lock-in.
 
 ## 3. Strategic Comparison
 
@@ -31,14 +36,17 @@ AgentR is the "Traffic Control" system for your AI workforce. It provides the mi
 | **State Management** | Fragile (In-Memory). Breaks if server restarts. | **Resilient (Redis Backplane).** Survives crashes. |
 | **Control** | Passive. You wait for the AI to finish. | **Active.** You can interrupt the AI mid-sentence. |
 | **Security** | None. Agents trust each other implicitly. | **Zero Trust.** Every message is authenticated & scanned. |
+| **Room Discovery** | N/A | Dynamic agent assignment and metadata discovery. |
+| **FinOps** | N/A | Quota management to prevent runaway LLM costs. |
+| **Auditing** | Ephemeral logs (Console/Terminal). | **Persistent & Replayable.** Immutable "Flight Data" with cloud storage. |
 | **Scale** | Single Server (Prototype only). | **Horizontal Scale.** Ready for Kubernetes/Azure Container Apps. |
 
 ## 4. ROI & Roadmap
 
-* **Immediate ROI:** Reduction in wasted API tokens via the Interrupt capability; elimination of "stuck" agent processes reducing compute waste.
-* **Readiness:** The platform is currently at **v1.0 Release Candidate** status, featuring full Distributed Locking, Authentication, and Binary Protocols.
-* **Next Steps:** Deployment to Azure Container Apps (ACA) and integration with the corporate Identify Provider (Entra ID).
+* **Next Steps:** Expansion of the Session Replay UI for advanced analytics and formal deployment templates for Azure Container Apps (ACA).
 
 ## 5. Conclusion
 
 AgentR transforms AI Agents from "unpredictable scripts" into "managed employees." It provides the necessary controls to deploy multi-agent systems with confidence, ensuring they remain safe, cost-effective, and obedient to human command.
+
+![AgentR Executive Banner](./images/banner_executive.png)

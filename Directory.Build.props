@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    
+    <!-- Enterprise Quality Gates -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+
+    <!-- Metadata -->
+    <Version>1.0.0</Version>
+    <Authors>Digvijay Chauhan</Authors>
+    <Company>Digvijay Chauhan</Company>
+    <Copyright>Copyright (c) 2026 Digvijay Chauhan</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/agentr-org/agentr</RepositoryUrl>
+    <PackageProjectUrl>https://agentr.ai</PackageProjectUrl>
+  </PropertyGroup>
+</Project>

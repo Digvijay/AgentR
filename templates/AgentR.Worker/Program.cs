@@ -3,117 +3,108 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 #if (UseSemanticKernel)
 using Microsoft.SemanticKernel;
 #endif
 
-Console.WriteLine("🤖 Starting AGENT_NAME_PLACEHOLDER...");
+// 🏗️ Enterprise-Grade Worker Setup
+var builder = Host.CreateApplicationBuilder(args);
 
-// --- AUTHENTICATION ---
-// Generate a self-signed JWT token for testing
-// TODO: In production, obtain this from your identity provider
-var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("ThisIsMySuperSecretKeyForAgentR_MustBe32CharsLong!"));
-var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-var tokenDescriptor = new SecurityTokenDescriptor
-{
-    Subject = new ClaimsIdentity(new[] { new Claim("sub", "AGENT_NAME_PLACEHOLDER") }),
-    Expires = DateTime.UtcNow.AddHours(1),
-    SigningCredentials = credentials
-};
-var tokenHandler = new JwtSecurityTokenHandler();
-var token = tokenHandler.CreateToken(tokenDescriptor);
-var accessToken = tokenHandler.WriteToken(token);
+// 1. Configure Services and Logging
+builder.Services.AddLogging(logging => logging.AddConsole());
 
-Console.WriteLine($"🔑 Generated Auth Token: {accessToken[..20]}...");
+// 2. Generate Development Token (Replace with Identity Provider in Prod)
+var accessToken = GenerateDevToken("AGENT_NAME_PLACEHOLDER");
+builder.Services.AddSingleton(new AgentClient("HUB_URL_PLACEHOLDER", "AGENT_NAME_PLACEHOLDER", accessToken));
 
 #if (UseSemanticKernel)
-// --- SEMANTIC KERNEL SETUP ---
-// AgentR is agnostic to the LLM provider. Choose the one that fits your needs:
-
+// 3. Configure Semantic Kernel (Brain)
 var kernelBuilder = Kernel.CreateBuilder();
-
-// OPTION 1: Local LLM with Ollama (Default for local dev)
+// Option: Ollama (Local)
 kernelBuilder.AddOpenAIChatCompletion(
     modelId: "llama3.2:latest",
-    apiKey: "not-needed-for-ollama",
+    apiKey: "ollama",
     httpClient: new HttpClient { BaseAddress = new Uri("http://localhost:11434/v1/") });
-
-/*
-// OPTION 2: Official OpenAI
-kernelBuilder.AddOpenAIChatCompletion(
-    modelId: "gpt-4o",
-    apiKey: "your-openai-api-key");
-
-// OPTION 3: Azure OpenAI
-kernelBuilder.AddAzureOpenAIChatCompletion(
-    deploymentName: "your-deployment-name",
-    endpoint: "https://your-resource.openai.azure.com/",
-    apiKey: "your-azure-api-key");
-*/
-
-var kernel = kernelBuilder.Build();
-
-Console.WriteLine("✅ Semantic Kernel configured with your chosen LLM");
+builder.Services.AddSingleton(kernelBuilder.Build());
 #endif
 
-// --- AGENTR CLIENT ---
-var client = new AgentClient("HUB_URL_PLACEHOLDER", "AGENT_NAME_PLACEHOLDER", accessToken);
+var host = builder.Build();
+var logger = host.Services.GetRequiredService<ILogger<Program>>();
+var client = host.Services.GetRequiredService<AgentClient>();
 
-// Define your agent's behavior
+// --- AGENT LOGIC ---
 client.OnTurnGranted += async (stopEvent) =>
 {
-    Console.WriteLine("🎤 Turn granted! Starting work...");
-    
-    // TODO: Implement your agent logic here
-    // Example: Call your LLM, process data, emit thinking frames, etc.
-    
+    logger.LogInformation("🎤 Turn granted! Starting inference loop...");
+
 #if (UseSemanticKernel)
-    var prompt = "Tell me a short joke about AI agents.";
-    await foreach (var chunk in kernel.InvokePromptStreamingAsync(prompt))
+    var kernel = host.Services.GetRequiredService<Kernel>();
+    var prompt = "Tell me a short joke about distributed systems.";
+    
+    try 
     {
-        if (stopEvent.IsCancellationRequested) 
+        await foreach (var chunk in kernel.InvokePromptStreamingAsync(prompt, cancellationToken: stopEvent))
         {
-            Console.WriteLine("\n⚡ Interrupted!");
-            break;
-        }
-        
-        var text = chunk.ToString();
-        if (!string.IsNullOrEmpty(text))
-        {
-            await client.EmitThinkingAsync("DemoRoom", text);
-            Console.Write(text);
+            if (!string.IsNullOrEmpty(chunk.ToString()))
+            {
+                await client.EmitThinkingAsync("DemoRoom", chunk.ToString());
+                Console.Write(chunk);
+            }
         }
     }
-    Console.WriteLine();
-#else
-    for (int i = 0; i < 10; i++)
+    catch (OperationCanceledException)
     {
-        if (stopEvent.IsCancellationRequested)
-        {
-            Console.WriteLine("\n⚡ Interrupted!");
-            break;
-        }
+        logger.LogWarning("⚡ Turn interrupted by server override.");
+    }
+#else
+    // Simulation Loop
+    for (int i = 0; i < 5; i++)
+    {
+        if (stopEvent.IsCancellationRequested) break;
+
+        var msg = $"Processing step {i+1}/5...";
+        await client.EmitThinkingAsync("DemoRoom", msg);
+        logger.LogInformation(msg);
         
-        var message = $"Processing step {i + 1}/10";
-        await client.EmitThinkingAsync("DemoRoom", message);
-        Console.WriteLine(message);
-        await Task.Delay(500);
+        await Task.Delay(500, stopEvent); // ✅ Propagate CancellationToken
     }
 #endif
-    
-    Console.WriteLine("✅ Work complete!");
+    logger.LogInformation("✅ Turn complete. Releasing lock.");
 };
 
-// Connect to the hub
-await client.ConnectAsync();
-await client.JoinRoomAsync("DemoRoom");
-
-Console.WriteLine("✅ Connected to AgentR Hub");
-Console.WriteLine("Press [Enter] to request turn, or Ctrl+C to exit");
-
-// Main loop
-while (true)
+// --- STARTUP ---
+try 
 {
-    Console.ReadLine();
-    await client.RequestTurnAsync("DemoRoom");
+    await client.ConnectAsync();
+    await client.JoinRoomAsync("DemoRoom");
+    
+    logger.LogInformation("🚀 Agent connected. Press [Enter] to request a turn.");
+    
+    // Simple interactive loop
+    while (true)
+    {
+        Console.ReadLine();
+        logger.LogInformation("Creating turn request...");
+        await client.RequestTurnAsync("DemoRoom");
+    }
+}
+catch (Exception ex)
+{
+    logger.LogCritical(ex, "Fatal error on startup");
+}
+
+// --- HELPERS ---
+static string GenerateDevToken(string agentName)
+{
+    var key = Encoding.UTF8.GetBytes("ThisIsMySuperSecretKeyForAgentR_MustBe32CharsLong!");
+    var tokenDescriptor = new SecurityTokenDescriptor
+    {
+        Subject = new ClaimsIdentity(new[] { new Claim("sub", agentName) }),
+        Expires = DateTime.UtcNow.AddHours(1),
+        SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256)
+    };
+    return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityTokenHandler().CreateToken(tokenDescriptor));
 }

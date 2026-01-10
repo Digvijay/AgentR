@@ -34,10 +34,27 @@ def my_agent_logic(stop_event):
 
 client.on_turn_granted = my_agent_logic
 client.request_turn()
+
+## Reactive Pattern
+Instead of polling, use the `on_floor_open` event to handle network congestion gracefully:
+
+```python
+pending_task = "Write a unit test"
+
+async def handle_floor():
+    global pending_task
+    if pending_task:
+        print("Floor is open! Claiming turn...")
+        await client.request_turn()
+
+client.on_floor_open = handle_floor
 ```
 
 ## Key Features
 - ✅ JWT Authentication
 - ✅ MessagePack Protocol
 - ✅ Remote Interruption via `stop_event`
-- ✅ Turn-based Concurrency
+- ✅ Reactive Concurrency (Floor-is-Open Signaling)
+- ✅ Flight Recorder (Auditing) Support: Python agents benefit from the Hub's automatic frame logging and compliance trails.
+- ✅ KEDA / Lobby Ready: Compatible with event-driven "Scale-to-Zero" architectures when paired with the Hub's assignment logic.
+- ✅ FinOps / Budget Aware: Automatically subject to the server's quota management and "Toll Booth" pricing.

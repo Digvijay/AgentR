@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentr-worker-dotnet
+  namespace: agentr
+spec:
+  replicas: 0 # Default to 0 for scale-to-zero
+  selector:
+    matchLabels:
+      app: agentr-worker
+      type: dotnet
+  template:
+    metadata:
+      labels:
+        app: agentr-worker
+        type: dotnet
+    spec:
+      containers:
+      - name: worker
+        image: agentr/worker:latest
+        env:
+        - name: AgentType
+          value: "dotnet"
+        - name: ConnectionStrings__redis
+          value: "redis:6379"
+        - name: HubUrl
+          value: "http://agentr-server/agentHub"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: dotnet-agent-scaler
+  namespace: agentr
+spec:
+  scaleTargetRef:
+    name: agentr-worker-dotnet
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  pollingInterval: 5
+  cooldownPeriod: 30
+  triggers:
+  - type: redis
+    metadata:
+      address: "redis:6379"
+      listName: "agentr:lobby:dotnet"
+      listLength: "1"
+      activationListLength: "0"
