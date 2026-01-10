@@ -24,6 +24,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="..\..\mcp.json">
+      <Link>mcp.json</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\AgentR.Server\AgentR.Server.csproj" />
     <ProjectReference Include="..\AgentR.Client\AgentR.Client.csproj" />
     <ProjectReference Include="..\AgentR.Shared\AgentR.Shared.csproj" />

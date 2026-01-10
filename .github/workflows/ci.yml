@@ -53,7 +53,8 @@ jobs:
         dotnet pack src/AgentR.Shared/AgentR.Shared.csproj -o nupkgs
         dotnet pack src/AgentR.Client/AgentR.Client.csproj -o nupkgs
         
-        dotnet build smoke-test/SmokeAgent/SmokeAgent.csproj -s ./nupkgs -s https://api.nuget.org/v3/index.json
+        dotnet restore smoke-test/SmokeAgent/SmokeAgent.csproj -s ./nupkgs -s https://api.nuget.org/v3/index.json
+        dotnet build smoke-test/SmokeAgent/SmokeAgent.csproj --no-restore
 
     - name: Pack Preview
       run: |
