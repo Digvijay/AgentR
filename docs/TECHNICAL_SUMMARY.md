@@ -44,11 +44,42 @@ Standard chat apps rely on in-memory state. AgentR implements a **Distributed Mu
 *   **Idempotency & Room Steering:** `JoinRoom` is now fully idempotent per connection. If an agent switches rooms on the same connection, the Hub automatically decrements the old room's count and removes the connection from the previous SignalR group before joining the new one, ensuring zero state leakage.
 *   **WatchDog (Lease Monitor):** A server-side background task monitors lock duration (default 60s). It forcibly revokes locks if an agent hangs, preventing deadlocks. Computes can opt-out by setting `AgentR:LeaseTimeoutSeconds` to `0`.
 
+#### Bounded turn-ownership guarantee
+
+Broadcasts are accepted only while the sending connection holds an active turn
+for the frame's room and the distributed lock has not reported ownership loss.
+After lease expiration, a former owner's new broadcasts are rejected with a
+`HubException`, even if that worker ignores its interrupt. The successor can
+continue publishing. Explicitly released turns are rejected in the same way.
+
+Broadcast, watchdog expiry, and release share a per-connection gate. Revocation
+clears local ownership before disposing the distributed lock. A former
+connection's repeated cleanup does not dispose another connection's turn, and watchdog notifications use
+`IHubContext` rather than a disposed hub instance. A connection must release its
+current turn before acquiring a turn in another room.
+
+Broadcast attempts without valid ownership now fail explicitly rather than
+silently returning. Free administrative interrupts still use `AdminInterrupt`
+or the existing interrupt endpoint and do not require a turn or room credits.
+
+`WatchdogTests.ExpiredOwner_CannotBroadcast_AfterSuccessorAcquiresTurn` verifies
+this using raw clients and an observer: the former owner ignores cancellation,
+the successor obtains the turn, stale publication is rejected, and current
+publication is delivered. Related tests cover repeated release, reacquisition,
+and room-bound ownership. These tests use one application host and real Redis
+locks; the test factory replaces the SignalR backplane with its in-memory
+implementation.
+
+This is not a claim of cross-replica delivery ordering, partition-safe fencing
+of external systems, exactly-once tool effects, or worker-crash recovery.
+Previously accepted messages may already be in transit. An interrupt requests
+cooperative cancellation; it cannot force arbitrary remote computation to stop.
+
 ### 3.2 True Interruptibility (The "Stop Button")
 
 AgentR bridges the gap between the Network and the CPU.
 
-* **Result:** This physically stops the compute loop on the worker node, saving GPU cycles and API costs immediately.
+* **Result:** The .NET client requests cancellation of the worker's current turn. Compute stops only when the agent implementation and downstream calls honor the cancellation token; interruption does not roll back completed effects.
 
 ### 3.3 Governance Middleware
 

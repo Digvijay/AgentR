@@ -22,6 +22,7 @@ public class SafetyTests : IClassFixture<AgentRFactory>
         await connection.StartAsync();
         var roomId = "SafetyRoom1";
         await connection.InvokeAsync("JoinRoom", roomId, null);
+        await connection.InvokeAsync("RequestTurn", roomId);
 
         // Act & Assert
         // "mutiny" is a banned word
@@ -46,6 +47,7 @@ public class SafetyTests : IClassFixture<AgentRFactory>
         await connection.StartAsync();
         var roomId = "SafetyRoom2";
         await connection.InvokeAsync("JoinRoom", roomId, null);
+        await connection.InvokeAsync("RequestTurn", roomId);
 
         // Act & Assert
         // "kill" is a banned word
@@ -70,6 +72,7 @@ public class SafetyTests : IClassFixture<AgentRFactory>
         await connection.StartAsync();
         var roomId = "SafetyRoom3";
         await connection.InvokeAsync("JoinRoom", roomId, null);
+        await connection.InvokeAsync("RequestTurn", roomId);
 
         // Act
         var frame = new MessageFrame 

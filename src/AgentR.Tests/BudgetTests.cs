@@ -111,6 +111,8 @@ public class BudgetTests : IClassFixture<AgentRFactory>
 
         var connection = CreateClient();
         await connection.StartAsync();
+        await connection.InvokeAsync("JoinRoom", roomId, null);
+        await connection.InvokeAsync("RequestTurn", roomId);
 
         // 2. Act
         // We use a raw invoke to verify the filter charges specifically for MessageFrame
@@ -121,7 +123,7 @@ public class BudgetTests : IClassFixture<AgentRFactory>
 
         // 3. Assert
         var balance = await budgetService.GetBalanceAsync(roomId);
-        Assert.Equal(99, balance); // 100 - 1
+        Assert.Equal(94, balance); // 100 - 5 for the turn - 1 for the message
     }
     [Fact]
     public async Task Hub_Deducts_Credits_For_Message_Frames()
@@ -173,6 +175,11 @@ public class BudgetTests : IClassFixture<AgentRFactory>
         await budgetService.DeductFundsAsync(roomId, 1000); // Now 0
 
         var connection = CreateClient();
+        var interrupted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.On<AgentFrame>("ReceiveSignal", frame =>
+        {
+            if (frame is InterruptFrame) interrupted.TrySetResult(true);
+        });
         await connection.StartAsync();
         await connection.InvokeAsync("JoinRoom", roomId, null);
 
@@ -181,7 +188,8 @@ public class BudgetTests : IClassFixture<AgentRFactory>
         await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync("RequestTurn", roomId));
 
         // Interrupt (Free) should SUCCEED
-        await connection.InvokeAsync("Broadcast", new InterruptFrame { RoomId = roomId, SenderId = "Tester", Reason = "Emergency" });
+        await connection.InvokeAsync("AdminInterrupt", roomId);
+        await interrupted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         
         var balance = await connection.InvokeAsync<long>("GetRoomBalance", roomId);
         Assert.Equal(0, balance);

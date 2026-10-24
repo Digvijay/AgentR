@@ -28,10 +28,31 @@ public class AgentHub : Hub<IAgentClient>
     // but the AUTHORITY is now Redis.
     private static readonly ConcurrentDictionary<string, string> _localConnectionMap = new();
 
+    private sealed class TurnState
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public IDistributedSynchronizationHandle? Handle { get; set; }
+        public string? RoomId { get; set; }
+        public CancellationTokenSource? LeaseCancellation { get; set; }
+    }
+
+    private TurnState GetTurnState()
+    {
+        if (Context.Items.TryGetValue("TurnState", out var value) && value is TurnState state)
+        {
+            return state;
+        }
+
+        var newState = new TurnState();
+        Context.Items["TurnState"] = newState;
+        return newState;
+    }
+
     private readonly McpGatewayService _mcpGateway;
     private readonly IBudgetService _budget;
     private readonly ILogger<AgentHub> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IHubContext<AgentHub, IAgentClient> _hubContext;
     
     public AgentHub(
         IDistributedLockProvider lockProvider, 
@@ -40,7 +61,8 @@ public class AgentHub : Hub<IAgentClient>
         McpGatewayService mcpGateway, 
         IBudgetService budget,
         ILogger<AgentHub> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHubContext<AgentHub, IAgentClient> hubContext)
     {
         _lockProvider = lockProvider;
         _discovery = discovery;
@@ -49,6 +71,7 @@ public class AgentHub : Hub<IAgentClient>
         _budget = budget;
         _logger = logger;
         _configuration = configuration;
+        _hubContext = hubContext;
     }
 
     // New RPC Method for MCP Tools
@@ -158,10 +181,18 @@ public class AgentHub : Hub<IAgentClient>
 
     public async Task Broadcast(AgentFrame frame)
     {
-        // SECURITY: Only the lock holder can broadcast
-        // We verify if THIS connection holds the distributed lock handle.
-        if (Context.Items.TryGetValue("TurnLock", out _))
+        var state = GetTurnState();
+        await state.Gate.WaitAsync(Context.ConnectionAborted);
+        try
         {
+            if (state.Handle == null || state.Handle.HandleLostToken.IsCancellationRequested ||
+                state.RoomId != frame.RoomId)
+            {
+                _logger.LogWarning("Broadcast rejected for {ConnectionId} in {RoomId}: no active turn.",
+                    Context.ConnectionId, frame.RoomId);
+                throw new HubException("No active turn for this room. Request a new turn before broadcasting.");
+            }
+
             // OTel: Track Money Burn
             if (frame is ThinkingFrame)
             {
@@ -175,83 +206,110 @@ public class AgentHub : Hub<IAgentClient>
             await Clients.GroupExcept(frame.RoomId, Context.ConnectionId)
                          .ReceiveSignal(frame);
         }
+        finally
+        {
+            state.Gate.Release();
+        }
     }
 
     public async Task RequestTurn(string roomId)
     {
-        // 1. Try to acquire the Redis Lock (Non-blocking)
-        // Key: "lock:room:DemoRoom"
-        var lockKey = $"lock:room:{roomId}";
-        
-        // We ask for a lock with 0 timeout. If taken, fail immediately.
-        var handle = await _lockProvider.TryAcquireLockAsync(lockKey, TimeSpan.Zero, Context.ConnectionAborted);
-
-        if (handle != null)
+        var state = GetTurnState();
+        await state.Gate.WaitAsync(Context.ConnectionAborted);
+        try
         {
-            // SUCCESS: We own the room now.
-            
-            // Store the lock handle in the Connection Context so we can release it later
-            Context.Items["TurnLock"] = handle;
-
-            // --- LEASE TIMER (Zombie Protection) ---
-            var leaseTimeoutSeconds = _configuration.GetValue<int>("AgentR:LeaseTimeoutSeconds", 60);
-            if (leaseTimeoutSeconds > 0)
+            if (state.Handle != null && state.RoomId != roomId)
             {
-                var leaseCts = new CancellationTokenSource();
-                Context.Items["LeaseCts"] = leaseCts;
-                _ = WatchDogAsync(handle, roomId, Context.ConnectionId, leaseCts.Token, TimeSpan.FromSeconds(leaseTimeoutSeconds));
+                throw new HubException("Release the current turn before requesting a turn in another room.");
             }
 
-            _localConnectionMap[Context.ConnectionId] = roomId;
+            // 1. Try to acquire the Redis Lock (Non-blocking)
+            // Key: "lock:room:DemoRoom"
+            var lockKey = $"lock:room:{roomId}";
 
-            _logger.LogInformation("Distributed Lock acquired for {RoomId} by {ConnectionId}", roomId, Context.ConnectionId);
+            // We ask for a lock with 0 timeout. If taken, fail immediately.
+            var handle = await _lockProvider.TryAcquireLockAsync(lockKey, TimeSpan.Zero, Context.ConnectionAborted);
 
-            // CAST TO BASE TYPE to force Union Serialization
-            AgentFrame signal = new TurnGrantedFrame 
-            { 
-                SenderId = "HOST", 
-                RoomId = roomId 
-            };
-            await Clients.Caller.ReceiveSignal(signal);
+            if (handle != null)
+            {
+                // SUCCESS: We own the room now.
+
+                state.Handle = handle;
+                state.RoomId = roomId;
+
+                // --- LEASE TIMER (Zombie Protection) ---
+                var leaseTimeoutSeconds = _configuration.GetValue<int>("AgentR:LeaseTimeoutSeconds", 60);
+                if (leaseTimeoutSeconds > 0)
+                {
+                    var leaseCts = new CancellationTokenSource();
+                    state.LeaseCancellation = leaseCts;
+                    _ = WatchDogAsync(state, handle, roomId, Context.ConnectionId, leaseCts.Token, TimeSpan.FromSeconds(leaseTimeoutSeconds));
+                }
+
+                _localConnectionMap[Context.ConnectionId] = roomId;
+
+                _logger.LogInformation("Distributed Lock acquired for {RoomId} by {ConnectionId}", roomId, Context.ConnectionId);
+
+                // CAST TO BASE TYPE to force Union Serialization
+                AgentFrame signal = new TurnGrantedFrame
+                {
+                    SenderId = "HOST",
+                    RoomId = roomId
+                };
+                await Clients.Caller.ReceiveSignal(signal);
+            }
+            else
+            {
+                // OTel: Record Contention
+                LockContention.Add(1, new KeyValuePair<string, object?>("room_id", roomId));
+
+                // FAIL: Someone else holds the lock (maybe on another server)
+                AgentFrame signal = new MessageFrame
+                {
+                    SenderId = "HOST",
+                    RoomId = roomId,
+                    Content = "BUSY: Room is locked by another agent."
+                };
+                await Clients.Caller.ReceiveSignal(signal);
+            }
         }
-        else
+        finally
         {
-            // OTel: Record Contention
-            LockContention.Add(1, new KeyValuePair<string, object?>("room_id", roomId));
-        
-            // FAIL: Someone else holds the lock (maybe on another server)
-            AgentFrame signal = new MessageFrame 
-            { 
-                SenderId = "HOST", 
-                RoomId = roomId, 
-                Content = "BUSY: Room is locked by another agent." 
-            };
-            await Clients.Caller.ReceiveSignal(signal);
+            state.Gate.Release();
         }
     }
 
-    private async Task WatchDogAsync(IDistributedSynchronizationHandle handle, string roomId, string connectionId, CancellationToken ct, TimeSpan timeout)
+    private async Task WatchDogAsync(TurnState state, IDistributedSynchronizationHandle handle, string roomId, string connectionId, CancellationToken ct, TimeSpan timeout)
     {
         try
         {
             await Task.Delay(timeout, ct);
-            
-            // If we get here, the token was NOT cancelled, meaning the lease expired.
-            _logger.LogWarning("⏰ Lease EXPIRED for {RoomId} (Connection {ConnectionId}). Forcing release.", roomId, connectionId);
-            
-            await handle.DisposeAsync();
+            await state.Gate.WaitAsync(ct);
+            try
+            {
+                if (!ReferenceEquals(state.Handle, handle)) return;
 
-            // Notify the zombie agent (if still connected)
-            await Clients.Client(connectionId).ReceiveSignal(new InterruptFrame 
-            { 
-                SenderId = "HOST", 
-                RoomId = roomId, 
-                Reason = "Lease Timeout (60s)"
-            });
+                _logger.LogWarning("Lease EXPIRED for {RoomId} (Connection {ConnectionId}). Forcing release.", roomId, connectionId);
+                await ReleaseTurnStateAsync(state, connectionId);
+                await _hubContext.Clients.Client(connectionId).ReceiveSignal(new InterruptFrame
+                {
+                    SenderId = "HOST",
+                    RoomId = roomId,
+                    Reason = $"Lease Timeout ({timeout.TotalSeconds:g}s)"
+                });
+            }
+            finally
+            {
+                state.Gate.Release();
+            }
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             // Normal: Turn released before timeout
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to expire turn for {ConnectionId} in {RoomId}.", connectionId, roomId);
         }
     }
 
@@ -286,24 +344,40 @@ public class AgentHub : Hub<IAgentClient>
 
     private async Task ReleaseTurnInternal()
     {
-        if (Context.Items.TryGetValue("LeaseCts", out var ctsObj) && ctsObj is CancellationTokenSource cts)
+        var state = GetTurnState();
+        await state.Gate.WaitAsync();
+        try
         {
+            await ReleaseTurnStateAsync(state, Context.ConnectionId);
+        }
+        finally
+        {
+            state.Gate.Release();
+        }
+    }
+
+    private async Task ReleaseTurnStateAsync(TurnState state, string connectionId)
+    {
+        var handle = state.Handle;
+        var roomId = state.RoomId;
+        state.Handle = null;
+        state.RoomId = null;
+        if (state.LeaseCancellation is { } cts)
+        {
+            state.LeaseCancellation = null;
             cts.Cancel();
             cts.Dispose();
-            Context.Items.Remove("LeaseCts");
         }
 
-        if (Context.Items.TryGetValue("TurnLock", out var lockObj) && 
-            lockObj is IDistributedSynchronizationHandle handle)
+        if (handle != null)
         {
             await handle.DisposeAsync();
-            Context.Items.Remove("TurnLock");
-            _logger.LogInformation("Lock released for {ConnectionId}", Context.ConnectionId);
+            _logger.LogInformation("Lock released for {ConnectionId}", connectionId);
 
             // BROADCAST: Signal the room that the floor is now open
-            if (_localConnectionMap.TryGetValue(Context.ConnectionId, out var roomId))
+            if (roomId != null)
             {
-                await Clients.Group(roomId).ReceiveSignal(new FloorOpenFrame 
+                await _hubContext.Clients.Group(roomId).ReceiveSignal(new FloorOpenFrame
                 { 
                     SenderId = "HOST", 
                     RoomId = roomId 
